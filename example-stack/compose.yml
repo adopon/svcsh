@@ -1,0 +1,48 @@
+# Example: a multi-service stack.
+#
+# Services that depend on each other live in ONE directory, because
+# `depends_on` only works within a compose project. `./svc.sh up example-stack app`
+# starts just `app` and its dependencies; `./svc.sh up example-stack` starts all.
+
+services:
+  app:
+    image: nginx:alpine
+    container_name: example-stack-app
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      APP_SECRET: ${APP_SECRET}
+    ports:
+      - "${EXAMPLE_APP_PORT}:80"
+    volumes:
+      - ${HOMELAB_SERVICE_DATA_PATH}/example-stack/app:/usr/share/nginx/html
+    depends_on:
+      - cache
+    networks:
+      - homelab-network
+
+  worker:
+    image: alpine:latest
+    container_name: example-stack-worker
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+    command: sh -c 'while true; do echo working; sleep 60; done'
+    networks:
+      - homelab-network
+
+  cache:
+    image: valkey/valkey:8-alpine
+    container_name: example-stack-cache
+    restart: unless-stopped
+    volumes:
+      - cache-data:/data
+    networks:
+      - homelab-network
+
+volumes:
+  cache-data:
+
+networks:
+  homelab-network:
+    external: true

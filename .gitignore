@@ -1,0 +1,16 @@
+# Instance config / secrets — never commit
+global.env
+.env
+**/.env
+
+# Runtime data
+**/data/
+**/etc-pihole/
+**/etc-dnsmasq.d/
+**/export/
+*.crt
+*.key
+*.tar.gz
+
+# OS noise
+.DS_Store

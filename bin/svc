@@ -1,0 +1,7 @@
+#!/bin/sh
+# `svc` wrapper: runs svc.sh from this repo. Safe to invoke via PATH or path.
+case "$0" in
+    */*) self="$0" ;;
+    *)   self="$(command -v -- "$0")" ;;
+esac
+exec "$(dirname "$(readlink -f "$self")")/../svc.sh" "$@"
