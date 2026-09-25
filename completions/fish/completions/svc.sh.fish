@@ -1,7 +1,7 @@
 # managed by homelab svc.sh shell integration
 # Fish completions for svc.sh and svcd.
-# Install: copy to ~/.config/fish/completions/svc.sh.fish (install-completion.sh
-# does this and substitutes @REPO_DIR@).
+# Install: copy to ~/.config/fish/completions/svc.sh.fish (install.sh does this
+# and substitutes @REPO_DIR@).
 set -g __svc_dir '@REPO_DIR@'
 if not test -d $__svc_dir; and set -q svc_repo
     set -g __svc_dir $svc_repo

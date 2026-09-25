@@ -23,7 +23,7 @@ Copy it, add your own services, and keep your real values out of git.
 ├── svc.sh                 # entrypoint: svc.sh <action> <stack> [service]
 ├── bin/svc                # `svc` wrapper (added to PATH by install.sh)
 ├── completions/           # bash/zsh/fish completions + svcd helper
-├── install.sh             # shell integration: PATH + completions
+├── install.sh             # shell integration: PATH + completions + compose env
 ├── manage-service.sh      # scaffold/remove a service directory
 ├── global.env.example     # copy to global.env; shared paths + identity
 ├── ports.env              # every host port, grouped by range
@@ -54,8 +54,10 @@ Your instance will look the same, plus one directory per stack, each with a real
    range, so collisions are visible at a glance.
 6. **Per-service `.env`** — only secrets/config unique to that service. Never ports
    or shared paths. Not committed: copy from the service's `.env.example`.
-7. **`svc.sh` is the only entrypoint.** Compose does not search parent directories,
-   so plain `docker compose up` inside a stack won't see `global.env`/`ports.env`.
+7. **Use `svc`/`svc.sh` as the entrypoint.** Compose does not search parent
+   directories, so plain `docker compose up` only works inside a stack when the
+   compose-env hook from `install.sh` is active (answer yes to the prompt or pass
+   `--compose-env`) — it exports `COMPOSE_ENV_FILES` while your shell is in the repo.
 
 ## Env layering
 
@@ -76,7 +78,8 @@ SSD_PATH=/mnt/ssd
 HOMELAB_SERVICE_DATA_PATH=${SSD_PATH}/services/homelab
 ```
 
-Requires a recent Docker Compose v2 (multiple `--env-file` needs >= 2.24).
+Requires a recent Docker Compose v2 (multiple `--env-file` and `COMPOSE_ENV_FILES`
+need >= 2.24).
 
 ## Port ranges
 
@@ -120,11 +123,17 @@ torrent peer port 6881, ...) are documented exceptions in `ports.env`.
 
 `install.sh` puts the `svc` command on PATH and wires tab-completion
 (action -> stack -> service) plus the `svcd` helper that cd's straight to a
-config or data directory (needs `jq`). bash, zsh and fish are supported:
+config or data directory (needs `jq`). It asks once whether to also export
+`COMPOSE_ENV_FILES` while your shell is inside the repo, so plain
+`docker compose up` can keep working from any stack directory (that mode adds a
+small shell hook: bash `PROMPT_COMMAND` / zsh `chpwd` / fish PWD event). bash,
+zsh and fish are supported:
 
 ```bash
-./install.sh          # detect shell from $SHELL
-./install.sh fish     # or force bash / zsh / fish
+./install.sh                    # detect shell, asks about the compose-env hook
+./install.sh fish               # or force bash / zsh / fish
+./install.sh --compose-env      # enable the hook without asking (for scripts)
+./install.sh --no-compose-env   # ensure it stays off
 ./install.sh --remove
 
 svc up example-stack  # `svc` works from anywhere after install.sh

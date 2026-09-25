@@ -1,5 +1,5 @@
 # Bash completion + `svcd` helper for svc.sh.
-# Source this file, or wire it up once with install-completion.sh.
+# Source this file, or wire it up once with install.sh.
 # zsh users: source svc.zsh instead (it loads this file via bashcompinit).
 
 if [ -n "${ZSH_VERSION:-}" ]; then
