@@ -27,21 +27,22 @@ Copy it, add your own services, and keep your real values out of git.
 ├── manage-service.sh      # scaffold/remove a service directory
 ├── global.env.example     # copy to global.env; shared paths + identity
 ├── ports.env              # every host port, grouped by range
-├── example-single/        # example: one-service stack
-│   ├── compose.yml
-│   └── .env.example
-└── example-stack/         # example: multi-service stack (depends_on)
-    ├── compose.yml
-    └── .env.example
+└── stacks/                # one directory per service/stack
+    ├── example-single/    # example: one-service stack
+    │   ├── compose.yml
+    │   └── .env.example
+    └── example-stack/     # example: multi-service stack (depends_on)
+        ├── compose.yml
+        └── .env.example
 ```
 
-Your instance will look the same, plus one directory per stack, each with a real
-`.env` next to its `compose.yml`.
+Your instance will look the same, plus one directory per stack under `stacks/`,
+each with a real `.env` next to its `compose.yml`.
 
 ## Rules of the pattern
 
-1. **One compose project per directory** — the directory name is the stack name you
-   pass to `svc.sh`.
+1. **One compose project per directory under `stacks/`** — the directory name is
+   the stack name you pass to `svc.sh`.
 2. **Services that depend on each other share a stack directory** (app + db,
    downloader + indexer + media server, ...) so `depends_on` works and they start
    together. Independent services get their own directory.
@@ -151,7 +152,7 @@ files live under `completions/fish/`.
 ```bash
 git clone <this repo> ~/services/homelab && cd ~/services/homelab
 cp global.env.example global.env                 # set drive paths, PUID/PGID, TZ
-cp example-single/.env.example example-single/.env
+cp stacks/example-single/.env.example stacks/example-single/.env
 docker network create homelab-network            # external network stacks join
 ./install.sh                                     # optional: `svc` on PATH + completions
 ./svc.sh up example-single

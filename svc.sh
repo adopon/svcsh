@@ -1,5 +1,6 @@
 #!/bin/bash
 base="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+stacks_dir="$base/stacks"
 action="$1"
 
 usage() {
@@ -29,9 +30,9 @@ if [ "$action" = "down" ] && [ -n "$service" ]; then
   exit 1
 fi
 
-cd "$base/$name" || { echo "no such stack: $name"; exit 1; }
+cd "$stacks_dir/$name" || { echo "no such stack: $name"; exit 1; }
 
-ENV_FLAGS=(--env-file ../global.env --env-file ../ports.env)
+ENV_FLAGS=(--env-file ../../global.env --env-file ../../ports.env)
 [ -f .env ] && ENV_FLAGS+=(--env-file .env)
 
 run() { docker compose "${ENV_FLAGS[@]}" "$@"; }

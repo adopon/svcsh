@@ -43,7 +43,7 @@ if [[ ! "$SERVICE_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
     exit 1
 fi
 
-CONFIG_DIR="$CONFIG_BASE/$SERVICE_NAME"
+CONFIG_DIR="$CONFIG_BASE/stacks/$SERVICE_NAME"
 DATA_DIR="$DATA_BASE/$SERVICE_NAME"
 
 remove_service() {
@@ -103,12 +103,12 @@ cat > "$CONFIG_DIR/compose.yml" <<EOF
 #   Config dir: $CONFIG_DIR   (persistent, survives reboots)
 #   Data dir:   $DATA_DIR     (bind-mount target for service data)
 #
-# Shared vars come from ../global.env, host ports from ../ports.env
+# Shared vars come from ../../global.env, host ports from ../../ports.env
 # (add a \${$(echo "$SERVICE_NAME" | tr '[:lower:]' '[:upper:]')_PORT} entry there).
 #
-# Start:   ../svc.sh up $SERVICE_NAME
-# Logs:    ../svc.sh logs $SERVICE_NAME
-# Stop:    ../svc.sh stop $SERVICE_NAME
+# Start:   ./svc.sh up $SERVICE_NAME        (from the repo root)
+# Logs:    ./svc.sh logs $SERVICE_NAME
+# Stop:    ./svc.sh stop $SERVICE_NAME
 services:
   $SERVICE_NAME:
     image: alpine:latest
@@ -117,7 +117,7 @@ services:
     # Uncomment to mount persistent storage into the container:
     # volumes:
     #   - \${HOMELAB_SERVICE_DATA_PATH}/$SERVICE_NAME:/data
-    # Uncomment to expose a port (host side comes from ../ports.env):
+    # Uncomment to expose a port (host side comes from ../../ports.env):
     # ports:
     #   - "\${$(echo "$SERVICE_NAME" | tr '[:lower:]' '[:upper:]')_PORT}:80"
 EOF
@@ -130,5 +130,5 @@ echo ""
 echo "Next steps:"
 echo "  1. Edit $CONFIG_DIR/compose.yml (image, ports, volumes)"
 echo "  2. Add a <NAME>_PORT var to $CONFIG_BASE/ports.env if you expose a port"
-echo "  3. ../svc.sh up $SERVICE_NAME"
+echo "  3. ./svc.sh up $SERVICE_NAME    (from the repo root)"
 echo "-----------------------------------------------"

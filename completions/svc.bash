@@ -10,7 +10,8 @@ fi
 _svc_dir="$(cd "$(dirname "$(readlink -f "$_svc_script")")/.." && pwd)"
 
 _svc_stacks() {
-    find "$_svc_dir" -maxdepth 1 -mindepth 1 -type d ! -name '.*' | while read -r d; do
+    [ -d "$_svc_dir/stacks" ] || return 0
+    find "$_svc_dir/stacks" -maxdepth 1 -mindepth 1 -type d ! -name '.*' | while read -r d; do
         [ -f "$d/compose.yml" ] || [ -f "$d/docker-compose.yml" ] || continue
         basename "$d"
     done
@@ -18,11 +19,11 @@ _svc_stacks() {
 
 _svc_services() {
     local stack="$1" dir
-    dir="$_svc_dir/$stack"
+    dir="$_svc_dir/stacks/$stack"
     if [ -d "$dir" ] && { [ -f "$dir/compose.yml" ] || [ -f "$dir/docker-compose.yml" ]; }; then
         (
             cd "$dir" || exit 1
-            flags=(--env-file ../global.env --env-file ../ports.env)
+            flags=(--env-file ../../global.env --env-file ../../ports.env)
             [ -f .env ] && flags+=(--env-file .env)
             docker compose "${flags[@]}" config --services 2>/dev/null
         )

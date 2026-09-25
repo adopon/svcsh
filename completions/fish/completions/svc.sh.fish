@@ -8,7 +8,9 @@ if not test -d $__svc_dir; and set -q svc_repo
 end
 
 function __svc_stacks
-    for d in $__svc_dir/*/
+    set -l stacks_dir $__svc_dir/stacks
+    test -d $stacks_dir; or return
+    for d in $stacks_dir/*/
         if test -f $d/compose.yml -o -f $d/docker-compose.yml
             basename $d
         end
@@ -16,10 +18,10 @@ function __svc_stacks
 end
 
 function __svc_services --argument-names stack
-    set -l dir $__svc_dir/$stack
+    set -l dir $__svc_dir/stacks/$stack
     test -f $dir/compose.yml -o -f $dir/docker-compose.yml; or return
     pushd $dir; or return
-    set -l flags --env-file ../global.env --env-file ../ports.env
+    set -l flags --env-file ../../global.env --env-file ../../ports.env
     test -f .env; and set flags $flags --env-file .env
     docker compose $flags config --services 2>/dev/null
     popd
