@@ -27,7 +27,7 @@ values out of git.
 ├── install.sh             # shell integration: PATH + completions + compose env
 ├── manage-service.sh      # scaffold/remove a service directory
 ├── global.env.example     # copy to global.env; shared paths + identity
-├── ports.env              # every host port, grouped by range
+├── ports.env.example      # copy to ports.env; host ports, grouped by range
 ├── examples/              # reference examples (NOT managed by svc.sh)
 │   ├── example-single/    # one-service stack
 │   ├── example-stack/     # multi-service stack (depends_on)
@@ -66,7 +66,8 @@ They are reference material only; to try one, copy it into `stacks/` first:
    `WEB_SERVICE_DATA_PATH`). Not committed: copy from `global.env.example`.
 5. **`ports.env`** — the single source of truth for host ports, grouped into fixed
    numeric ranges per category. New services take a free number in the matching
-   range, so collisions are visible at a glance.
+   range, so collisions are visible at a glance. Instance-specific: copy from
+   `ports.env.example`, never committed (see Secrets).
 6. **Per-service `.env`** — only secrets/config unique to that service. Never ports
    or shared paths. Not committed: copy from the service's `.env.example`.
 7. **Use `svc`/`svc.sh` as the entrypoint.** Compose does not search parent
@@ -77,7 +78,7 @@ They are reference material only; to try one, copy it into `stacks/` first:
 ## Env layering
 
 `svc.sh` invokes compose with all three layers (paths are absolute, so this works
-from any depth):
+from any depth; files that don't exist are skipped):
 
 ```
 docker compose --env-file <repo>/global.env --env-file <repo>/ports.env --env-file .env ...
@@ -173,6 +174,7 @@ files live under `completions/fish/`.
 ```bash
 git clone <this repo> ~/services/homelab && cd ~/services/homelab
 cp global.env.example global.env                 # set drive paths, PUID/PGID, TZ
+cp ports.env.example ports.env                   # assign host ports per range
 cp -r examples/example-single stacks/            # bring over an example to try
 cp stacks/example-single/.env.example stacks/example-single/.env
 docker network create homelab-network            # external network stacks join
@@ -185,10 +187,10 @@ Hardware-specific lines in compose files (`/dev/dri`, `/opt/vc/lib`,
 
 ## Secrets
 
-`.gitignore` excludes `global.env` and every `.env`; only `compose.yml`, scripts,
-and `*.env.example` belong in git. To offer this as a starting point for others,
-mark the repo as a template on GitHub (Settings -> Template repository) so copies
-don't share history.
+`.gitignore` excludes `global.env`, `ports.env` and every `.env`; only
+`compose.yml`, scripts, and `*.env.example` belong in git. To offer this as a
+starting point for others, mark the repo as a template on GitHub (Settings ->
+Template repository) so copies don't share history.
 
 ## AI assistance
 

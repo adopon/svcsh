@@ -34,7 +34,9 @@ fi
 
 cd "$stacks_dir/$name" || { echo "no such stack: $name"; exit 1; }
 
-ENV_FLAGS=(--env-file "$base/global.env" --env-file "$base/ports.env")
+ENV_FLAGS=()
+[ -f "$base/global.env" ] && ENV_FLAGS+=(--env-file "$base/global.env")
+[ -f "$base/ports.env" ] && ENV_FLAGS+=(--env-file "$base/ports.env")
 [ -f .env ] && ENV_FLAGS+=(--env-file .env)
 
 run() { docker compose "${ENV_FLAGS[@]}" "$@"; }

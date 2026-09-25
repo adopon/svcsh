@@ -1,5 +1,6 @@
 # Instance config / secrets — never commit
 global.env
+ports.env
 .env
 **/.env
 

@@ -88,9 +88,15 @@ _svc_compose_env() {
     local _svc_env
     case "$PWD" in
         "@REPO_DIR@"|"@REPO_DIR@"/*)
-            _svc_env="@REPO_DIR@/global.env,@REPO_DIR@/ports.env"
-            [ -f "$PWD/.env" ] && _svc_env="$_svc_env,$PWD/.env"
-            export COMPOSE_ENV_FILES="$_svc_env" _SVC_COMPOSE_ENV=1 ;;
+            _svc_env=""
+            [ -f "@REPO_DIR@/global.env" ] && _svc_env="@REPO_DIR@/global.env"
+            [ -f "@REPO_DIR@/ports.env" ] && _svc_env="${_svc_env:+$_svc_env,}@REPO_DIR@/ports.env"
+            [ -f "$PWD/.env" ] && _svc_env="${_svc_env:+$_svc_env,}$PWD/.env"
+            if [ -n "$_svc_env" ]; then
+                export COMPOSE_ENV_FILES="$_svc_env" _SVC_COMPOSE_ENV=1
+            else
+                unset COMPOSE_ENV_FILES _SVC_COMPOSE_ENV
+            fi ;;
         *)
             if [ -n "${_SVC_COMPOSE_ENV:-}" ]; then
                 unset COMPOSE_ENV_FILES _SVC_COMPOSE_ENV
@@ -106,10 +112,17 @@ emit_fish_hook() {
 
 function __svc_compose_env --on-variable PWD --description 'homelab: COMPOSE_ENV_FILES inside the services repo'
     if test "$PWD" = "@REPO_DIR@"; or string match -q "@REPO_DIR@/*" "$PWD"
-        set -l files "@REPO_DIR@/global.env" "@REPO_DIR@/ports.env"
+        set -l files
+        test -f "@REPO_DIR@/global.env"; and set files $files "@REPO_DIR@/global.env"
+        test -f "@REPO_DIR@/ports.env"; and set files $files "@REPO_DIR@/ports.env"
         test -f "$PWD/.env"; and set files $files "$PWD/.env"
-        set -gx COMPOSE_ENV_FILES (string join , $files)
-        set -g _SVC_COMPOSE_ENV 1
+        if test (count $files) -gt 0
+            set -gx COMPOSE_ENV_FILES (string join , $files)
+            set -g _SVC_COMPOSE_ENV 1
+        else
+            set -e COMPOSE_ENV_FILES
+            set -e _SVC_COMPOSE_ENV
+        end
     else if set -q _SVC_COMPOSE_ENV
         set -e COMPOSE_ENV_FILES
         set -e _SVC_COMPOSE_ENV
