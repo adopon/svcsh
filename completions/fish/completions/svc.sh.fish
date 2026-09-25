@@ -37,12 +37,12 @@ function __svcd_complete_services
     __svc_services $tokens[2]
 end
 
-set -l actions up stop down restart logs config ps path edit
+set -l actions up stop down restart pull logs config ps path edit
 
 for cmd in svc svc.sh ./svc.sh
     complete -c $cmd -f -n "not __fish_seen_subcommand_from $actions" -a "$actions"
     complete -c $cmd -f -n "__fish_seen_subcommand_from $actions; and test (count (commandline -opc)) -lt 3" -a '(__svc_stacks)'
-    complete -c $cmd -f -n "__fish_seen_subcommand_from up stop restart logs config ps path edit; and test (count (commandline -opc)) -ge 3" -a '(__svc_complete_services)'
+    complete -c $cmd -f -n "__fish_seen_subcommand_from up stop restart pull logs config ps path edit; and test (count (commandline -opc)) -ge 3" -a '(__svc_complete_services)'
 end
 
 complete -c svcd -f -n 'test (count (commandline -opc)) -lt 2' -a '(__svc_stacks)'

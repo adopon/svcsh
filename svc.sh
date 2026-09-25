@@ -4,10 +4,11 @@ action="$1"
 
 usage() {
   echo "usage: svc.sh <action> <stack> [service]"
-  echo "actions: up stop down restart logs config ps path edit"
+  echo "actions: up stop down restart pull logs config ps path edit"
   echo "examples:"
   echo "  svc.sh up media sonarr      # sonarr + its depends_on"
   echo "  svc.sh up media             # whole stack"
+  echo "  svc.sh pull media sonarr    # pull image(s) with the env layer loaded"
   echo "  svc.sh config media sonarr  # print resolved config, no side effects"
   echo "  svc.sh path media sonarr    # host data path(s), first is primary"
   echo "  svc.sh edit media sonarr    # open compose.yml at the sonarr section"
@@ -19,7 +20,7 @@ name="$2"
 service="${3:-}"
 
 case "$action" in
-  up|stop|down|restart|logs|config|ps|path|edit) ;;
+  up|stop|down|restart|pull|logs|config|ps|path|edit) ;;
   *) echo "unknown action: $action"; usage; exit 1 ;;
 esac
 
@@ -78,6 +79,7 @@ case "$action" in
   stop)    if [ -n "$service" ]; then run stop "$service"; else run stop; fi ;;
   down)    run down ;;
   restart) if [ -n "$service" ]; then run restart "$service"; else run restart; fi ;;
+  pull)    if [ -n "$service" ]; then run pull "$service"; else run pull; fi ;;
   logs)    if [ -n "$service" ]; then run logs -f "$service"; else run logs -f; fi ;;
   config)  if [ -n "$service" ]; then run config "$service"; else run config; fi ;;
   ps)      if [ -n "$service" ]; then run ps "$service"; else run ps; fi ;;

@@ -111,6 +111,7 @@ torrent peer port 6881, ...) are documented exceptions in `ports.env`.
 ./svc.sh logs example-stack app
 ./svc.sh stop example-stack app      # stop one service (down is stack-wide)
 ./svc.sh down example-stack
+./svc.sh pull example-stack app      # pull image(s) with the env layer loaded
 ./svc.sh path example-stack app      # host data path(s) for app (first is primary)
 ./svc.sh edit example-stack app      # open compose.yml at the app section
 

@@ -33,7 +33,7 @@ _svc_completion() {
     local cur
     cur="${COMP_WORDS[COMP_CWORD]}"
     case "$COMP_CWORD" in
-      1) COMPREPLY=( $(compgen -W "up stop down restart logs config ps path edit" -- "$cur") ) ;;
+      1) COMPREPLY=( $(compgen -W "up stop down restart pull logs config ps path edit" -- "$cur") ) ;;
       2) COMPREPLY=( $(compgen -W "$(_svc_stacks)" -- "$cur") ) ;;
       3) COMPREPLY=( $(compgen -W "$(_svc_services "${COMP_WORDS[2]}")" -- "$cur") ) ;;
     esac
