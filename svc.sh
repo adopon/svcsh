@@ -5,14 +5,16 @@ action="$1"
 
 usage() {
   echo "usage: svc.sh <action> <stack> [service]"
+  echo "       stack = name, or group/name when using groups (optional)"
   echo "actions: up stop down restart pull logs config ps path edit"
   echo "examples:"
-  echo "  svc.sh up media sonarr      # sonarr + its depends_on"
-  echo "  svc.sh up media             # whole stack"
-  echo "  svc.sh pull media sonarr    # pull image(s) with the env layer loaded"
-  echo "  svc.sh config media sonarr  # print resolved config, no side effects"
-  echo "  svc.sh path media sonarr    # host data path(s), first is primary"
-  echo "  svc.sh edit media sonarr    # open compose.yml at the sonarr section"
+  echo "  svc.sh up media sonarr              # flat stack, no group"
+  echo "  svc.sh up homelab/media sonarr      # grouped stack"
+  echo "  svc.sh up homelab/media           # whole stack"
+  echo "  svc.sh pull homelab/media sonarr  # pull image(s) with the env layer loaded"
+  echo "  svc.sh config web/site-a          # print resolved config, no side effects"
+  echo "  svc.sh path homelab/media sonarr  # host data path(s), first is primary"
+  echo "  svc.sh edit web/site-a            # open compose.yml at the site section"
 }
 
 [ -z "$action" ] && { usage; exit 1; }
@@ -32,7 +34,7 @@ fi
 
 cd "$stacks_dir/$name" || { echo "no such stack: $name"; exit 1; }
 
-ENV_FLAGS=(--env-file ../../global.env --env-file ../../ports.env)
+ENV_FLAGS=(--env-file "$base/global.env" --env-file "$base/ports.env")
 [ -f .env ] && ENV_FLAGS+=(--env-file .env)
 
 run() { docker compose "${ENV_FLAGS[@]}" "$@"; }

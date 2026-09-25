@@ -1,6 +1,6 @@
 # Example: a stack with a single service.
 #
-# The directory name is the stack name: ./svc.sh up example-single
+# The directory name is the stack name: ./svc.sh up homelab/example-single
 services:
   example-single:
     image: nginx:alpine
@@ -11,7 +11,7 @@ services:
       # Secrets/config come from this stack's .env (see .env.example)
       EXAMPLE_SECRET: ${EXAMPLE_SECRET}
     ports:
-      # Host side from ../ports.env, container side fixed
+      # Host side from ports.env, container side fixed
       - "${EXAMPLE_SINGLE_PORT}:80"
     # Persistent service data lives on the SSD, keyed by service name:
     # volumes:

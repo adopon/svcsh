@@ -12,18 +12,33 @@ if [[ -f "$CONFIG_BASE/global.env" ]]; then
     source "$CONFIG_BASE/global.env"
     set +a
 fi
-DATA_BASE="${DATA_BASE:-${HOMELAB_SERVICE_DATA_PATH:-$CONFIG_BASE}}"
 
 # --- ARGUMENT PARSING ---
 MODE=""
+GROUP=""
 SERVICE_NAME=""
+KNOWN_GROUPS="web homelab"
 
 case "${1:-}" in
     create)          MODE="create"; shift ;;
     remove|rm|-r|--remove) MODE="remove"; shift ;;
     "") : ;; # no args -> interactive below
-    *) MODE="create"; SERVICE_NAME="$1"; shift ;;
+    *) MODE="create" ;; # first arg handled below (group or name)
 esac
+
+if [[ -n "${1:-}" ]]; then
+    # Two args = <group> <name>. One arg = <name> unless it is a known group
+    # (then the name is asked interactively). Groups are optional: with no
+    # group the stack is created directly under stacks/.
+    if [[ -n "${2:-}" ]]; then
+        GROUP="$1"; shift
+    elif [[ " $KNOWN_GROUPS " == *" $1 "* ]] && [[ ! -f "$CONFIG_BASE/stacks/$1/compose.yml" ]]; then
+        GROUP="$1"; shift
+    fi
+fi
+if [[ -n "${1:-}" ]]; then
+    SERVICE_NAME="$1"; shift
+fi
 
 if [[ -z "$MODE" ]]; then
     read -r -p "What do you want to do? [c]reate / [r]emove: " action
@@ -33,18 +48,36 @@ if [[ -z "$MODE" ]]; then
     esac
 fi
 
+if [[ -z "$GROUP" ]]; then
+    read -r -p "Group (web / homelab, empty for no group): " GROUP
+fi
+
 if [[ -z "$SERVICE_NAME" ]]; then
     read -r -p "Service name: " SERVICE_NAME
 fi
 
-# Validate service name (only letters, numbers, dash, underscore)
+# Validate names (only letters, numbers, dash, underscore)
+if [[ -n "$GROUP" && ! "$GROUP" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "Error: Invalid group '$GROUP'. Use only letters, numbers, '-' or '_'."
+    exit 1
+fi
 if [[ ! "$SERVICE_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
     echo "Error: Invalid service name '$SERVICE_NAME'. Use only letters, numbers, '-' or '_'."
     exit 1
 fi
 
-CONFIG_DIR="$CONFIG_BASE/stacks/$SERVICE_NAME"
+# Per-group data root: web sites live under WEB_SERVICE_DATA_PATH, everything
+# else (including flat stacks) under HOMELAB_SERVICE_DATA_PATH (see global.env).
+case "$GROUP" in
+    web) DATA_BASE="${DATA_BASE:-${WEB_SERVICE_DATA_PATH:-${HOMELAB_SERVICE_DATA_PATH:-$CONFIG_BASE}}}" ;;
+    *)   DATA_BASE="${DATA_BASE:-${HOMELAB_SERVICE_DATA_PATH:-$CONFIG_BASE}}" ;;
+esac
+DATA_PATH_VAR="HOMELAB_SERVICE_DATA_PATH"
+[[ "$GROUP" == "web" ]] && DATA_PATH_VAR="WEB_SERVICE_DATA_PATH"
+
+CONFIG_DIR="$CONFIG_BASE/stacks${GROUP:+/$GROUP}/$SERVICE_NAME"
 DATA_DIR="$DATA_BASE/$SERVICE_NAME"
+STACK_LABEL="${GROUP:+$GROUP/}$SERVICE_NAME"
 
 remove_service() {
     if [[ ! -d "$CONFIG_DIR" && ! -d "$DATA_DIR" ]]; then
@@ -54,8 +87,8 @@ remove_service() {
 
     # Stop the container(s) through svc.sh so global.env/ports.env/.env are loaded
     if command -v docker &>/dev/null && [[ -x "$CONFIG_BASE/svc.sh" ]]; then
-        echo "Stopping containers for '$SERVICE_NAME'..."
-        "$CONFIG_BASE/svc.sh" down "$SERVICE_NAME" 2>/dev/null || \
+        echo "Stopping containers for '$STACK_LABEL'..."
+        "$CONFIG_BASE/svc.sh" down "$STACK_LABEL" 2>/dev/null || \
             echo "Warning: could not stop containers (running anyway?)."
     fi
 
@@ -98,17 +131,17 @@ fi
 touch "$DATA_DIR/.gitkeep"
 
 cat > "$CONFIG_DIR/compose.yml" <<EOF
-# Compose file for: $SERVICE_NAME
+# Compose file for: $STACK_LABEL
 #
 #   Config dir: $CONFIG_DIR   (persistent, survives reboots)
 #   Data dir:   $DATA_DIR     (bind-mount target for service data)
 #
-# Shared vars come from ../../global.env, host ports from ../../ports.env
+# Shared vars come from the repo's global.env, host ports from ports.env
 # (add a \${$(echo "$SERVICE_NAME" | tr '[:lower:]' '[:upper:]')_PORT} entry there).
 #
-# Start:   ./svc.sh up $SERVICE_NAME        (from the repo root)
-# Logs:    ./svc.sh logs $SERVICE_NAME
-# Stop:    ./svc.sh stop $SERVICE_NAME
+# Start:   ./svc.sh up $STACK_LABEL   (from the repo root)
+# Logs:    ./svc.sh logs $STACK_LABEL
+# Stop:    ./svc.sh stop $STACK_LABEL
 services:
   $SERVICE_NAME:
     image: alpine:latest
@@ -116,19 +149,19 @@ services:
     restart: unless-stopped
     # Uncomment to mount persistent storage into the container:
     # volumes:
-    #   - \${HOMELAB_SERVICE_DATA_PATH}/$SERVICE_NAME:/data
-    # Uncomment to expose a port (host side comes from ../../ports.env):
+    #   - \${$DATA_PATH_VAR}/$SERVICE_NAME:/data
+    # Uncomment to expose a port (host side comes from ports.env):
     # ports:
     #   - "\${$(echo "$SERVICE_NAME" | tr '[:lower:]' '[:upper:]')_PORT}:80"
 EOF
 
 echo "-----------------------------------------------"
-echo "Created service '$SERVICE_NAME':"
+echo "Created service '$STACK_LABEL':"
 echo "  Config: $CONFIG_DIR/compose.yml"
 echo "  Data:   $DATA_DIR"
 echo ""
 echo "Next steps:"
 echo "  1. Edit $CONFIG_DIR/compose.yml (image, ports, volumes)"
 echo "  2. Add a <NAME>_PORT var to $CONFIG_BASE/ports.env if you expose a port"
-echo "  3. ./svc.sh up $SERVICE_NAME    (from the repo root)"
+echo "  3. ./svc.sh up $STACK_LABEL    (from the repo root)"
 echo "-----------------------------------------------"

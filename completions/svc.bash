@@ -9,11 +9,23 @@ else
 fi
 _svc_dir="$(cd "$(dirname "$(readlink -f "$_svc_script")")/.." && pwd)"
 
+# List stacks as group/stack (or plain name for flat stacks directly under
+# stacks/ — groups are optional).
 _svc_stacks() {
     [ -d "$_svc_dir/stacks" ] || return 0
-    find "$_svc_dir/stacks" -maxdepth 1 -mindepth 1 -type d ! -name '.*' | while read -r d; do
-        [ -f "$d/compose.yml" ] || [ -f "$d/docker-compose.yml" ] || continue
-        basename "$d"
+    local g d name
+    for g in "$_svc_dir/stacks"/*/; do
+        [ -d "$g" ] || continue
+        name="${g%/}"
+        if [ -f "$name/compose.yml" ] || [ -f "$name/docker-compose.yml" ]; then
+            echo "${name#"$_svc_dir/stacks/"}"
+            continue
+        fi
+        for d in "$g"*/; do
+            [ -f "$d/compose.yml" ] || [ -f "$d/docker-compose.yml" ] || continue
+            d="${d%/}"
+            echo "${d#"$_svc_dir/stacks/"}"
+        done
     done
 }
 
@@ -23,7 +35,7 @@ _svc_services() {
     if [ -d "$dir" ] && { [ -f "$dir/compose.yml" ] || [ -f "$dir/docker-compose.yml" ]; }; then
         (
             cd "$dir" || exit 1
-            flags=(--env-file ../../global.env --env-file ../../ports.env)
+            flags=(--env-file "$_svc_dir/global.env" --env-file "$_svc_dir/ports.env")
             [ -f .env ] && flags+=(--env-file .env)
             docker compose "${flags[@]}" config --services 2>/dev/null
         )
@@ -50,9 +62,9 @@ _svcd_completion() {
 }
 
 # cd to the repo root, a stack's config dir, or a service's primary host data dir:
-#   svcd                 -> <repo>
-#   svcd media           -> <repo>/media
-#   svcd media sonarr    -> first bind mount of sonarr
+#   svcd                  -> <repo>
+#   svcd homelab/media    -> <repo>/stacks/homelab/media
+#   svcd homelab/media sonarr -> first bind mount of sonarr
 svcd() {
     if [ "$#" -eq 0 ]; then
         cd "$_svc_dir" || return 1

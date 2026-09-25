@@ -27,29 +27,37 @@ Copy it, add your own services, and keep your real values out of git.
 ├── manage-service.sh      # scaffold/remove a service directory
 ├── global.env.example     # copy to global.env; shared paths + identity
 ├── ports.env              # every host port, grouped by range
-└── stacks/                # one directory per service/stack
-    ├── example-single/    # example: one-service stack
-    │   ├── compose.yml
-    │   └── .env.example
-    └── example-stack/     # example: multi-service stack (depends_on)
-        ├── compose.yml
-        └── .env.example
+└── stacks/                # one directory per stack (groups are optional)
+    ├── web/               # optional group: sites you host (self or clients)
+    │   └── example-site/  # example: reverse-proxied site
+    └── homelab/           # optional group: plain services (media, apps, infra)
+        ├── example-single/    # example: one-service stack
+        └── example-stack/     # example: multi-service stack (depends_on)
 ```
 
 Your instance will look the same, plus one directory per stack under `stacks/`,
 each with a real `.env` next to its `compose.yml`.
 
+**Groups are optional.** They exist only to separate purposes (e.g. `web` = hosted
+sites, `homelab` = plain services). If you don't need that separation, put stacks
+directly under `stacks/` (e.g. `stacks/immich/`) and call
+`./svc.sh up immich` — everything works the same, you just omit the group.
+
 ## Rules of the pattern
 
 1. **One compose project per directory under `stacks/`** — the directory name is
-   the stack name you pass to `svc.sh`.
+   the stack name you pass to `svc.sh`. A stack may live directly under
+   `stacks/` (e.g. `stacks/immich/` → `svc.sh up immich`) or under an optional
+   group directory (e.g. `stacks/web/site-a/` → `svc.sh up web/site-a`) that
+   separates purposes like hosted sites from plain services.
 2. **Services that depend on each other share a stack directory** (app + db,
    downloader + indexer + media server, ...) so `depends_on` works and they start
    together. Independent services get their own directory.
 3. **`compose.yml` never hardcodes host ports or shared paths** — it references
    `${VARS}` resolved from the central files.
 4. **`global.env`** — shared, machine-specific values (drive paths, PUID/PGID, TZ).
-   Not committed: copy from `global.env.example`.
+   Each group gets its own data root (`HOMELAB_SERVICE_DATA_PATH`,
+   `WEB_SERVICE_DATA_PATH`). Not committed: copy from `global.env.example`.
 5. **`ports.env`** — the single source of truth for host ports, grouped into fixed
    numeric ranges per category. New services take a free number in the matching
    range, so collisions are visible at a glance.
@@ -62,10 +70,11 @@ each with a real `.env` next to its `compose.yml`.
 
 ## Env layering
 
-`svc.sh` invokes compose with all three layers:
+`svc.sh` invokes compose with all three layers (paths are absolute, so this works
+from any depth):
 
 ```
-docker compose --env-file ../global.env --env-file ../ports.env --env-file .env ...
+docker compose --env-file <repo>/global.env --env-file <repo>/ports.env --env-file .env ...
 ```
 
 Later files override earlier ones, so precedence is:
@@ -87,6 +96,7 @@ need >= 2.24).
 Keep `ports.env` grouped so the number tells you what it is:
 
 ```
+2800s  web sites (group: web, direct ports)
 3000s  web UIs / dashboards
 3100s  media
 3200s  apps / automation
@@ -109,17 +119,19 @@ torrent peer port 6881, ...) are documented exceptions in `ports.env`.
 ## Usage
 
 ```bash
-./svc.sh up example-stack            # whole stack
-./svc.sh up example-stack app        # one service + its depends_on
-./svc.sh config example-stack app    # print resolved config, no side effects
-./svc.sh logs example-stack app
-./svc.sh stop example-stack app      # stop one service (down is stack-wide)
-./svc.sh down example-stack
-./svc.sh pull example-stack app      # pull image(s) with the env layer loaded
-./svc.sh path example-stack app      # host data path(s) for app (first is primary)
-./svc.sh edit example-stack app      # open compose.yml at the app section
+./svc.sh up homelab/example-stack            # whole stack
+./svc.sh up homelab/example-stack app        # one service + its depends_on
+./svc.sh config web/example-site             # print resolved config, no side effects
+./svc.sh logs homelab/example-stack app
+./svc.sh stop homelab/example-stack app      # stop one service (down is stack-wide)
+./svc.sh down homelab/example-stack
+./svc.sh pull homelab/example-stack app      # pull image(s) with the env layer loaded
+./svc.sh path homelab/example-stack app      # host data path(s) for app (first is primary)
+./svc.sh edit web/example-site               # open compose.yml at the site section
 
-./manage-service.sh myapp            # scaffold a new service directory
+./manage-service.sh web mysite               # scaffold a new web site (group)
+./manage-service.sh immich                   # scaffold a stack without a group
+./manage-service.sh homelab myapp            # scaffold into the homelab group
 ```
 
 `install.sh` puts the `svc` command on PATH and wires tab-completion
@@ -137,10 +149,10 @@ zsh and fish are supported:
 ./install.sh --no-compose-env   # ensure it stays off
 ./install.sh --remove
 
-svc up example-stack  # `svc` works from anywhere after install.sh
+svc up homelab/example-stack  # `svc` works from anywhere after install.sh
 svcd                      # cd to the services repo root
-svcd example-stack        # cd to the stack's config dir
-svcd example-stack app    # cd to app's primary data dir
+svcd homelab/example-stack # cd to the stack's config dir
+svcd homelab/example-stack app    # cd to app's primary data dir
 ```
 
 Without installing, use `./svc.sh ...` from the repo. Manual completion setup:
@@ -152,10 +164,10 @@ files live under `completions/fish/`.
 ```bash
 git clone <this repo> ~/services/homelab && cd ~/services/homelab
 cp global.env.example global.env                 # set drive paths, PUID/PGID, TZ
-cp stacks/example-single/.env.example stacks/example-single/.env
+cp stacks/homelab/example-single/.env.example stacks/homelab/example-single/.env
 docker network create homelab-network            # external network stacks join
 ./install.sh                                     # optional: `svc` on PATH + completions
-./svc.sh up example-single
+./svc.sh up homelab/example-single
 ```
 
 Hardware-specific lines in compose files (`/dev/dri`, `/opt/vc/lib`,

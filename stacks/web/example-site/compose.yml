@@ -1,0 +1,23 @@
+# Example: a web site (client or self-hosted) behind a reverse proxy.
+#
+# Group is "web", stack name is the site: ./svc.sh up web/example-site
+# Web sites usually don't need a host port — the reverse proxy routes by
+# hostname. If one is needed, add the port to ports.env (web range).
+services:
+  example-site:
+    image: nginx:alpine
+    container_name: example-site
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - ${WEB_SERVICE_DATA_PATH}/example-site/html:/usr/share/nginx/html:ro
+    # Reverse proxy (e.g. caddy) joins the web-network and routes to :80 by name:
+    # networks:
+    #   - web-network
+    networks:
+      - homelab-network
+
+networks:
+  homelab-network:
+    external: true
