@@ -1,6 +1,6 @@
-# Example: a stack with a single service.
-#
-# The directory name is the stack name: ./svc.sh up homelab/example-single
+# Example: a stack with a single service. Reference only — svc.sh does not
+# manage examples/; copy one into stacks/ to try it:
+#   cp -r examples/example-single stacks/ && ./svc.sh up example-single
 services:
   example-single:
     image: nginx:alpine

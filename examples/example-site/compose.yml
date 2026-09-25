@@ -1,6 +1,8 @@
 # Example: a web site (client or self-hosted) behind a reverse proxy.
+# Reference only — svc.sh does not manage examples/; copy into the web group
+# to try it:
+#   mkdir -p stacks/web && cp -r examples/example-site stacks/web/ && ./svc.sh up web/example-site
 #
-# Group is "web", stack name is the site: ./svc.sh up web/example-site
 # Web sites usually don't need a host port — the reverse proxy routes by
 # hostname. If one is needed, add the port to ports.env (web range).
 services:

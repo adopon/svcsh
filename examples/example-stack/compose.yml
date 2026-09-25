@@ -1,8 +1,10 @@
-# Example: a multi-service stack.
+# Example: a multi-service stack. Reference only — svc.sh does not manage
+# examples/; copy one into stacks/ to try it:
+#   cp -r examples/example-stack stacks/ && ./svc.sh up example-stack
 #
 # Services that depend on each other live in ONE directory, because
-# `depends_on` only works within a compose project. `./svc.sh up homelab/example-stack app`
-# starts just `app` and its dependencies; `./svc.sh up homelab/example-stack` starts all.
+# `depends_on` only works within a compose project. `svc.sh up example-stack app`
+# starts just `app` and its dependencies; `svc.sh up example-stack` starts all.
 
 services:
   app:
