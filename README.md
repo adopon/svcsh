@@ -94,7 +94,9 @@ services (space-separated). Groups never nest deeper than one level.
    `${VARS}` resolved from the central files.
 4. **`global.env`** — shared, machine-specific values (drive paths, PUID/PGID, TZ).
    Each group gets its own data root (`HOMELAB_SERVICE_DATA_PATH`,
-   `WEB_SERVICE_DATA_PATH`). Not committed: copy from `global.env.example`.
+   `WEB_SERVICE_DATA_PATH`). It also carries the scaffold defaults used by the
+   `manage-service.sh` wizard: `SVC_NETWORK`, `SVC_DEFAULT_GROUP`,
+   `SVC_TUNNEL_DOMAIN`. Not committed: copy from `global.env.example`.
 5. **`ports.env`** — the single source of truth for host ports, grouped into fixed
    numeric ranges per category. New services take a free number in the matching
    range, so collisions are visible at a glance. Instance-specific: copy from
@@ -174,6 +176,17 @@ cp -r examples/example-single stacks/          # try an example
 ./manage-service.sh immich                   # scaffold a stack without a group
 ./manage-service.sh homelab myapp            # scaffold into the homelab group
 ```
+
+Run in a terminal, `manage-service.sh add` (or `create`) becomes an interactive
+wizard: it asks for the image, container ports, whether to expose a host port
+(suggesting the next free one in the range), extra env vars, which network to
+join, and whether a Cloudflare tunnel ingress is needed. It then writes a real
+`compose.yml` (port var wired to `ports.env`, data volume, network from
+`${SVC_NETWORK}`), the stack's `.env` + `.env.example`, updates `ports.env`,
+and prints the tunnel reminder (`myapp.ponado.lt -> http://myapp:8080`).
+Wizard defaults come from `global.env`: `SVC_NETWORK`, `SVC_DEFAULT_GROUP`,
+`SVC_TUNNEL_DOMAIN`. When stdin is not a terminal (scripts, CI) it falls back
+to the plain alpine scaffold.
 
 `install.sh` puts the `svc` command on PATH and wires tab-completion
 (action -> stack -> service) plus the `svcd` helper that cd's straight to a

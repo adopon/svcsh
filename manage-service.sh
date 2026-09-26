@@ -20,7 +20,7 @@ SERVICE_NAME=""
 KNOWN_GROUPS="web homelab"
 
 case "${1:-}" in
-    create)          MODE="create"; shift ;;
+    create|add)      MODE="create"; shift ;;
     remove|rm|-r|--remove) MODE="remove"; shift ;;
     "") : ;; # no args -> interactive below
     *) MODE="create" ;; # first arg handled below (group or name)
@@ -49,7 +49,8 @@ if [[ -z "$MODE" ]]; then
 fi
 
 if [[ -z "$GROUP" ]]; then
-    read -r -p "Group (web / homelab, empty for no group): " GROUP
+    read -r -p "Group (empty for no group)${SVC_DEFAULT_GROUP:+ [$SVC_DEFAULT_GROUP]}: " GROUP
+    GROUP="${GROUP:-$SVC_DEFAULT_GROUP}"
 fi
 
 if [[ -z "$SERVICE_NAME" ]]; then
@@ -130,6 +131,165 @@ fi
 # Keep the data dir visible in git if the services repo tracks configs
 touch "$DATA_DIR/.gitkeep"
 
+# Wizard defaults from global.env (instance config)
+NETWORK="${SVC_NETWORK:-homelab-network}"
+TUNNEL_DOMAIN="${SVC_TUNNEL_DOMAIN:-}"
+# Env var names must not contain dashes: my-app -> MY_APP_PORT
+PORT_VAR="$(echo "$SERVICE_NAME" | tr '[:lower:]-' '[:upper:]_')_PORT"
+
+# Next free host port in the given range, scanning ports.env.
+next_free_port() {
+    local lo="$1" hi="$2" max
+    max="$(awk -F= -v lo="$lo" -v hi="$hi" \
+        '/^[A-Z_][A-Z0-9_]*=[0-9]+$/ { p=$2+0; if (p>=lo && p<=hi && p>max) max=p }
+         END { print max+0 }' "$CONFIG_BASE/ports.env" 2>/dev/null)"
+    [[ "$max" -lt "$lo" ]] && max="$lo"
+    echo "$max"
+}
+
+# Append VAR=value under the first range header matching the marker.
+insert_port() {
+    local line="$1" marker="$2" file="$CONFIG_BASE/ports.env"
+    awk -v line="$line" -v m="$marker" '
+        $0 ~ m && !done { print; print line; done=1; next }
+        { print }
+        END { if (!done) print line }
+    ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+}
+
+# Run the interactive scaffold wizard (stdin is a terminal).
+wizard_create() {
+    local IMAGE CONTAINER_PORTS EXPOSE HOST_PORT KV
+    local EXPOSE_PORT=false NETWORK_REF="$NETWORK"
+    local -a ENV_PAIRS=() ENV_LINES=()
+
+    read -r -p "Image: " IMAGE
+    [[ -z "$IMAGE" ]] && { echo "Error: image is required."; exit 1; }
+
+    read -r -p "Container port(s), comma-separated (empty = internal only): " CONTAINER_PORTS
+
+    if [[ -n "$CONTAINER_PORTS" ]]; then
+        read -r -p "Expose a host port? [y/N]: " EXPOSE
+        if [[ "$EXPOSE" =~ ^[Yy]$ ]]; then
+            EXPOSE_PORT=true
+            local range_start=3000
+            [[ "$GROUP" == "web" ]] && range_start=2800
+            local suggested
+            suggested="$(next_free_port "$range_start" $((range_start+99)))"
+            read -r -p "Host port [$suggested]: " HOST_PORT
+            HOST_PORT="${HOST_PORT:-$suggested}"
+        fi
+    fi
+
+    while true; do
+        read -r -p "Extra env var (K=V, empty to finish): " KV
+        [[ -z "$KV" ]] && break
+        ENV_PAIRS+=("$KV")
+        ENV_LINES+=("      ${KV%%=*}: \${${KV%%=*}}")
+    done
+
+    read -r -p "Join network $NETWORK? [Y/n]: " JOIN_NET
+    # Compose interpolates ${SVC_NETWORK} only when global.env defines it;
+    # otherwise the resolved name is written literally.
+    if [[ -n "${SVC_NETWORK:-}" ]]; then
+        NETWORK_REF='${SVC_NETWORK}'
+    else
+        [[ "$JOIN_NET" =~ ^[Nn]$ ]] && NETWORK_REF=""
+    fi
+
+    cat > "$CONFIG_DIR/compose.yml" <<EOF
+# Compose file for: $STACK_LABEL
+#
+#   Config dir: $CONFIG_DIR
+#   Data dir:   $DATA_DIR
+services:
+  $SERVICE_NAME:
+    image: $IMAGE
+    container_name: $SERVICE_NAME
+    restart: unless-stopped
+    environment:
+      TZ: \${TZ}
+$(printf '%s\n' "${ENV_LINES[@]}")
+EOF
+    if [[ "$EXPOSE_PORT" == true ]]; then
+        cat >> "$CONFIG_DIR/compose.yml" <<EOF
+    ports:
+      - "\${$PORT_VAR}:${CONTAINER_PORTS%%,*}"
+EOF
+    fi
+    cat >> "$CONFIG_DIR/compose.yml" <<EOF
+    volumes:
+      - \${$DATA_PATH_VAR}/$SERVICE_NAME:/data
+EOF
+    if [[ -n "$NETWORK_REF" ]]; then
+        cat >> "$CONFIG_DIR/compose.yml" <<EOF
+    networks:
+      - default
+
+networks:
+  default:
+    name: $NETWORK_REF
+    external: true
+EOF
+    fi
+
+    if [[ ${#ENV_PAIRS[@]} -gt 0 ]]; then
+        local pair
+        for pair in "${ENV_PAIRS[@]}"; do
+            printf '%s\n' "$pair" >> "$CONFIG_DIR/.env"
+            printf '%s=\n' "${pair%%=*}" >> "$CONFIG_DIR/.env.example"
+        done
+    fi
+
+    echo "-----------------------------------------------"
+    echo "Created service '$STACK_LABEL':"
+    echo "  Config: $CONFIG_DIR/compose.yml"
+    echo "  Data:   $DATA_DIR"
+    echo ""
+
+    if [[ "$EXPOSE_PORT" == true ]]; then
+        if [[ ! -f "$CONFIG_BASE/ports.env" && -f "$CONFIG_BASE/ports.env.example" ]]; then
+            cp "$CONFIG_BASE/ports.env.example" "$CONFIG_BASE/ports.env"
+        fi
+        if [[ -f "$CONFIG_BASE/ports.env" ]]; then
+            local marker="# 3000s"
+            [[ "$GROUP" == "web" ]] && marker="# 2800s"
+            insert_port "$PORT_VAR=$HOST_PORT" "$marker"
+            echo "  Ports:  $PORT_VAR=$HOST_PORT -> $CONFIG_BASE/ports.env"
+        else
+            echo "  Ports:  add '$PORT_VAR=$HOST_PORT' to $CONFIG_BASE/ports.env"
+        fi
+    fi
+
+    read -r -p "Add Cloudflare tunnel ingress? [y/N]: " TUNNEL
+    if [[ "$TUNNEL" =~ ^[Yy]$ ]]; then
+        local first_port hostname
+        first_port="${CONTAINER_PORTS%%,*}"
+        if [[ -n "$TUNNEL_DOMAIN" ]]; then
+            hostname="$SERVICE_NAME.$TUNNEL_DOMAIN"
+            echo "  Tunnel: add ingress in the Cloudflare dashboard:"
+            echo "          $hostname -> http://$SERVICE_NAME:$first_port"
+        else
+            echo "  Tunnel: add the ingress in the Cloudflare dashboard"
+            echo "          (<hostname> -> http://$SERVICE_NAME:$first_port)"
+        fi
+    fi
+
+    echo ""
+    if [[ -x "$CONFIG_BASE/svc.sh" ]] && "$CONFIG_BASE/svc.sh" config "$STACK_LABEL" >/dev/null 2>&1; then
+        echo "  Config check: OK — ./svc.sh up $STACK_LABEL"
+    else
+        echo "  Config check: review $CONFIG_DIR/compose.yml, then ./svc.sh up $STACK_LABEL"
+    fi
+    echo "-----------------------------------------------"
+}
+
+if [[ -t 0 ]]; then
+    wizard_create
+    exit 0
+fi
+
+# Non-interactive: plain alpine scaffold.
 cat > "$CONFIG_DIR/compose.yml" <<EOF
 # Compose file for: $STACK_LABEL
 #
@@ -137,7 +297,7 @@ cat > "$CONFIG_DIR/compose.yml" <<EOF
 #   Data dir:   $DATA_DIR     (bind-mount target for service data)
 #
 # Shared vars come from the repo's global.env, host ports from ports.env
-# (add a \${$(echo "$SERVICE_NAME" | tr '[:lower:]' '[:upper:]')_PORT} entry there).
+# (add a \${$PORT_VAR} entry there).
 #
 # Start:   ./svc.sh up $STACK_LABEL   (from the repo root)
 # Logs:    ./svc.sh logs $STACK_LABEL
@@ -152,7 +312,7 @@ services:
     #   - \${$DATA_PATH_VAR}/$SERVICE_NAME:/data
     # Uncomment to expose a port (host side comes from ports.env):
     # ports:
-    #   - "\${$(echo "$SERVICE_NAME" | tr '[:lower:]' '[:upper:]')_PORT}:80"
+    #   - "\${$PORT_VAR}:80"
 EOF
 
 echo "-----------------------------------------------"
