@@ -15,10 +15,11 @@ they keep their own stacks and never commit (see "Instance model" below).
   `<stack>` is a directory under `stacks/` (or `group/stack` when groups are
   used). Actions: `up stop down restart pull logs config ps path edit`.
 - `manage-service.sh` — scaffolds/removes a stack directory (+ data dir). With
-  a terminal on stdin it runs an interactive wizard (image, container ports,
-  host port suggestion, env vars, network, tunnel reminder) and writes a real
-  compose.yml + .env + .env.example, updates ports.env; with non-TTY stdin it
-  falls back to a plain alpine scaffold (scripting/CI).
+  a terminal on stdin it runs an interactive wizard (image, port mapping
+  host:container with the next free host port suggested, env vars, network,
+  tunnel reminder) and writes a real compose.yml + .env + .env.example,
+  updates ports.env; with non-TTY stdin it falls back to a plain alpine
+  scaffold (scripting/CI).
 - `install.sh` — shell integration: `svc` on PATH, tab completions, optional
   `COMPOSE_ENV_FILES` hook so plain `docker compose` works inside the repo.
 - `completions/` — bash (`svc.bash`), zsh (loads `svc.bash` via bashcompinit),
