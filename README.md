@@ -178,10 +178,10 @@ cp -r examples/example-single stacks/          # try an example
 ```
 
 Run in a terminal, `manage-service.sh add` (or `create`) becomes an interactive
-wizard: it asks for the image, a port mapping `host:container` (the next free
-host port in the range is suggested; `none` = internal only), extra env vars,
-which network to join, and whether a Cloudflare tunnel ingress is needed. It
-then writes a real `compose.yml` (port var wired to `ports.env`, data volume,
+wizard: it asks for the image, the container port(s), the host port (the next
+free one in the range is suggested; empty accepts it), extra env vars, which
+network to join, and whether a Cloudflare tunnel ingress is needed. It then
+writes a real `compose.yml` (port var wired to `ports.env`, data volume,
 network from `${SVC_NETWORK}`), the stack's `.env` + `.env.example`, updates
 `ports.env`, and prints the tunnel reminder
 (`myapp.ponado.lt -> http://myapp:8080`). Wizard defaults come from

@@ -159,28 +159,23 @@ insert_port() {
 
 # Run the interactive scaffold wizard (stdin is a terminal).
 wizard_create() {
-    local IMAGE MAPPING HOST_PORT CONTAINER_PORTS KV
+    local IMAGE CONTAINER_PORTS HOST_PORT KV
     local EXPOSE_PORT=false NETWORK_REF="$NETWORK"
     local -a ENV_PAIRS=() ENV_LINES=()
 
     read -r -p "Image: " IMAGE
     [[ -z "$IMAGE" ]] && { echo "Error: image is required."; exit 1; }
 
-    local range_start=3000
-    [[ "$GROUP" == "web" ]] && range_start=2800
-    local suggested
-    suggested="$(next_free_port "$range_start" $((range_start+99))):8080"
-    read -r -p "Port mapping host:container [$suggested] (none = internal only): " MAPPING
-    if [[ -z "$MAPPING" ]]; then
-        MAPPING="$suggested"
-    fi
-    if [[ "$MAPPING" != "none" && "$MAPPING" != "-" ]]; then
-        while [[ "$MAPPING" != *:* ]]; do
-            read -r -p "Expected host:container, e.g. $suggested: " MAPPING
-        done
+    read -r -p "Container port(s), comma-separated (empty = internal only): " CONTAINER_PORTS
+
+    if [[ -n "$CONTAINER_PORTS" ]]; then
+        local range_start=3000
+        [[ "$GROUP" == "web" ]] && range_start=2800
+        local suggested
+        suggested="$(next_free_port "$range_start" $((range_start+99)))"
+        read -r -p "Host port [$suggested]: " HOST_PORT
+        HOST_PORT="${HOST_PORT:-$suggested}"
         EXPOSE_PORT=true
-        HOST_PORT="${MAPPING%%:*}"
-        CONTAINER_PORTS="${MAPPING##*:}"
     fi
 
     while true; do
@@ -216,7 +211,7 @@ EOF
     if [[ "$EXPOSE_PORT" == true ]]; then
         cat >> "$CONFIG_DIR/compose.yml" <<EOF
     ports:
-      - "\${$PORT_VAR}:$CONTAINER_PORTS"
+      - "\${$PORT_VAR}:${CONTAINER_PORTS%%,*}"
 EOF
     fi
     cat >> "$CONFIG_DIR/compose.yml" <<EOF
@@ -265,14 +260,15 @@ EOF
 
     read -r -p "Add Cloudflare tunnel ingress? [y/N]: " TUNNEL
     if [[ "$TUNNEL" =~ ^[Yy]$ ]]; then
-        local hostname
+        local hostname first_port
+        first_port="${CONTAINER_PORTS%%,*}"
         if [[ -n "$TUNNEL_DOMAIN" ]]; then
             hostname="$SERVICE_NAME.$TUNNEL_DOMAIN"
             echo "  Tunnel: add ingress in the Cloudflare dashboard:"
-            echo "          $hostname -> http://$SERVICE_NAME:$CONTAINER_PORTS"
+            echo "          $hostname -> http://$SERVICE_NAME:$first_port"
         else
             echo "  Tunnel: add the ingress in the Cloudflare dashboard"
-            echo "          (<hostname> -> http://$SERVICE_NAME:$CONTAINER_PORTS)"
+            echo "          (<hostname> -> http://$SERVICE_NAME:$first_port)"
         fi
     fi
 
