@@ -42,7 +42,11 @@ ENV_FLAGS=()
 run() { docker compose "${ENV_FLAGS[@]}" "$@"; }
 
 compose_file() {
-  if [ -f compose.yml ]; then echo compose.yml; else echo docker-compose.yml; fi
+  if [ -f compose.yml ]; then echo compose.yml
+  elif [ -f compose.yaml ]; then echo compose.yaml
+  elif [ -f docker-compose.yml ]; then echo docker-compose.yml
+  else echo docker-compose.yaml
+  fi
 }
 
 # svc.sh path <stack>            -> stack config dir

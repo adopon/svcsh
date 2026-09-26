@@ -20,6 +20,22 @@ they keep their own stacks and never commit (see "Instance model" below).
 - `completions/` — bash (`svc.bash`), zsh (loads `svc.bash` via bashcompinit),
   fish (`svc.sh.fish`); also the `svcd` helper (cd to stack config/data dir).
 
+## Naming grammar (slash vs space)
+
+`svc <action> <stack> [service]` — three words, two kinds of separator:
+
+- **Slash = directory structure.** A stack is ONE token; the slash is part of
+  its name, mirroring the directory: `stacks/immich/` → `svc up immich`,
+  `stacks/web/site-a/` → `svc up web/site-a`.
+- **Space = compose argument.** The optional third word is a compose service
+  *inside* the stack, exactly like `docker compose up <service>`:
+  `svc up homelab/media sonarr`.
+
+`svc up group/stack/service` is NEVER valid — a service is not a stack.
+Completions implement this: position 1 completes actions, position 2 completes
+stack tokens (slash inside), position 3 completes services of the chosen stack.
+Groups never nest deeper than one level.
+
 ## Layout
 
 ```
@@ -66,6 +82,9 @@ ports.env.example                       → copy to ports.env (gitignored, per-i
 - Shell scripts are bash, `#!/bin/bash`, POSIX-ish; completions are bash + fish.
 - All paths in scripts are resolved relative to the script's own dir
   (`readlink -f "$0"` → repo root), never `$PWD`.
+- A stack's compose file may be named `compose.yml`, `compose.yaml`,
+  `docker-compose.yml` or `docker-compose.yaml` — svc.sh and both completion
+  copies accept all four (checked in that order, `compose.yml` first).
 - No comments unless they document intent/behavior, not the obvious.
 - README.md documents the user-facing pattern; keep it in sync with code
   changes (layout, usage, rules).
@@ -80,6 +99,9 @@ bash -c 'source completions/svc.bash; _svc_stacks'
 # svc.sh must resolve a stack without instance env files present:
 tmp=$(mktemp -d) && cp -r svc.sh stacks "$tmp/" && printf 'services:\n  x:\n    image: alpine\n' > "$tmp/stacks/x/compose.yml"
 (cd "$tmp" && ./svc.sh config x >/dev/null)
+# all four compose filenames must resolve (here: compose.yaml):
+printf 'services:\n  y:\n    image: alpine\n' > "$tmp/stacks/y/compose.yaml"
+(cd "$tmp" && ./svc.sh config y >/dev/null)
 # manage-service.sh scaffold smoke test (overrides CONFIG_BASE / *_SERVICE_DATA_PATH):
 CONFIG_BASE="$tmp" WEB_SERVICE_DATA_PATH="$tmp/web" HOMELAB_SERVICE_DATA_PATH="$tmp/homelab" bash manage-service.sh create web test >/dev/null
 ```

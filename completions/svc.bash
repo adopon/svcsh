@@ -9,6 +9,11 @@ else
 fi
 _svc_dir="$(cd "$(dirname "$(readlink -f "$_svc_script")")/.." && pwd)"
 
+_has_compose() {
+    [ -f "$1/compose.yml" ] || [ -f "$1/compose.yaml" ] || \
+    [ -f "$1/docker-compose.yml" ] || [ -f "$1/docker-compose.yaml" ]
+}
+
 # List stacks as group/stack (or plain name for flat stacks directly under
 # stacks/ — groups are optional).
 _svc_stacks() {
@@ -17,12 +22,12 @@ _svc_stacks() {
     for g in "$_svc_dir/stacks"/*/; do
         [ -d "$g" ] || continue
         name="${g%/}"
-        if [ -f "$name/compose.yml" ] || [ -f "$name/docker-compose.yml" ]; then
+        if _has_compose "$name"; then
             echo "${name#"$_svc_dir/stacks/"}"
             continue
         fi
         for d in "$g"*/; do
-            [ -f "$d/compose.yml" ] || [ -f "$d/docker-compose.yml" ] || continue
+            _has_compose "$d" || continue
             d="${d%/}"
             echo "${d#"$_svc_dir/stacks/"}"
         done
@@ -32,7 +37,7 @@ _svc_stacks() {
 _svc_services() {
     local stack="$1" dir
     dir="$_svc_dir/stacks/$stack"
-    if [ -d "$dir" ] && { [ -f "$dir/compose.yml" ] || [ -f "$dir/docker-compose.yml" ]; }; then
+    if [ -d "$dir" ] && _has_compose "$dir"; then
         (
             cd "$dir" || exit 1
             flags=(--env-file "$_svc_dir/global.env" --env-file "$_svc_dir/ports.env")

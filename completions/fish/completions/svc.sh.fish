@@ -7,16 +7,20 @@ if not test -d $__svc_dir; and set -q svc_repo
     set -g __svc_dir $svc_repo
 end
 
+function __svc_has_compose --argument-names dir
+    test -f $dir/compose.yml -o -f $dir/compose.yaml -o -f $dir/docker-compose.yml -o -f $dir/docker-compose.yaml
+end
+
 function __svc_stacks
     set -l stacks_dir $__svc_dir/stacks
     test -d $stacks_dir; or return
     for g in $stacks_dir/*/
-        if test -f $g/compose.yml -o -f $g/docker-compose.yml
+        if __svc_has_compose $g
             string replace "$stacks_dir/" "" (string trim -r -c / $g)
             continue
         end
         for d in $g*/
-            if test -f $d/compose.yml -o -f $d/docker-compose.yml
+            if __svc_has_compose $d
                 set -l d (string trim -r -c / $d)
                 string replace "$stacks_dir/" "" $d
             end
@@ -26,7 +30,7 @@ end
 
 function __svc_services --argument-names stack
     set -l dir $__svc_dir/stacks/$stack
-    test -f $dir/compose.yml -o -f $dir/docker-compose.yml; or return
+    __svc_has_compose $dir; or return
     pushd $dir; or return
     set -l flags --env-file $__svc_dir/global.env --env-file $__svc_dir/ports.env
     test -f .env; and set flags $flags --env-file .env

@@ -32,9 +32,10 @@ values out of git.
 │   ├── example-single/    # one-service stack
 │   ├── example-stack/     # multi-service stack (depends_on)
 │   └── example-site/      # reverse-proxied web site (web group)
-└── stacks/                # your stacks (groups are optional)
-    ├── web/               # optional group: sites you host (self or clients)
-    └── homelab/           # optional group: plain services (media, apps, infra)
+└── stacks/                # your stacks — add your own (groups are optional)
+    ├── immich/            # flat stack example → svc up immich
+    └── web/               # optional group example → svc up web/site-a
+        └── site-a/
 ```
 
 Your instance will look the same, plus one directory per stack under `stacks/`,
@@ -49,13 +50,43 @@ directly under `stacks/` (e.g. `stacks/immich/`) and call
 real stacks can never collide (and a `git pull` can never touch your stacks).
 They are reference material only; to try one, copy it into `stacks/` first:
 
+## Naming: stacks, groups, services
+
+Every invocation has three words — action, stack, and optionally a service:
+
+```
+svc <action> <stack> [service]
+```
+
+- **Action** — `up stop down restart pull logs config ps path edit`.
+- **Stack** — **one token**. It is a directory name under `stacks/`, either flat
+  (`immich`) or grouped (`web/site-a`). The slash is part of the stack's name —
+  it mirrors the directory layout, not a path separator.
+- **Service** — a compose service *inside* the stack, space-separated, exactly
+  like `docker compose up <service>`.
+
+Rule of thumb: **slash = directory structure, space = compose argument.**
+
+| You type | What runs |
+|----------|-----------|
+| `svc up immich` | the whole flat stack |
+| `svc up web/site-a` | the whole grouped stack |
+| `svc up homelab/media sonarr` | only sonarr + its `depends_on` |
+| `svc up homelab/media/radarr` | never valid — radarr is a service, not a stack |
+
+Tab-completion follows the same grammar: after the action it completes stack
+names (one token, slash inside), after the stack it completes the stack's
+services (space-separated). Groups never nest deeper than one level.
+
 ## Rules of the pattern
 
 1. **One compose project per directory under `stacks/`** — the directory name is
    the stack name you pass to `svc.sh`. A stack may live directly under
    `stacks/` (e.g. `stacks/immich/` → `svc.sh up immich`) or under an optional
    group directory (e.g. `stacks/web/site-a/` → `svc.sh up web/site-a`) that
-   separates purposes like hosted sites from plain services.
+   separates purposes like hosted sites from plain services. The compose file
+   may be named `compose.yml`, `compose.yaml`, `docker-compose.yml` or
+   `docker-compose.yaml` — all four are supported (checked in that order).
 2. **Services that depend on each other share a stack directory** (app + db,
    downloader + indexer + media server, ...) so `depends_on` works and they start
    together. Independent services get their own directory.
