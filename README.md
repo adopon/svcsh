@@ -69,7 +69,7 @@ cp -r examples/example-single "<config root>/stacks/"   # then: svc up example-s
 
 The checkout is just code and holds no per-host values; the config root is just
 data. They can live anywhere, so you can keep one `svcsh` checkout (e.g.
-`~/scripts/svcsh`) and drive compose files elsewhere (e.g. `/srv/services`), or
+`~/ops/svcsh`) and drive compose files elsewhere (e.g. `/srv/services`), or
 work against several config roots from the same checkout.
 
 The config root is resolved in this order, first match wins:
@@ -280,14 +280,14 @@ docker network create homelab-network            # external network stacks join
 Or keep the scripts in one place and the compose files in another:
 
 ```bash
-git clone <this repo> ~/scripts/svcsh
+git clone <this repo> ~/ops/svcsh
 mkdir -p /srv/services
-cp ~/scripts/svcsh/global.env.example /srv/services/global.env
-cp ~/scripts/svcsh/ports.env.example  /srv/services/ports.env
+cp ~/ops/svcsh/global.env.example /srv/services/global.env
+cp ~/ops/svcsh/ports.env.example  /srv/services/ports.env
 mkdir -p /srv/services/stacks
-~/scripts/svcsh/install.sh --config-dir /srv/services   # records the root once
-~/scripts/svcsh/manage-service.sh immich                # scaffolds into /srv/services
-~/scripts/svcsh/svc.sh up immich                        # works from anywhere
+~/ops/svcsh/install.sh --config-dir /srv/services   # records the root once
+~/ops/svcsh/manage-service.sh immich                # scaffolds into /srv/services
+~/ops/svcsh/svc.sh up immich                        # works from anywhere
 ```
 
 Hardware-specific lines in compose files (`/dev/dri`, `/opt/vc/lib`,

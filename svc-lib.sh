@@ -3,7 +3,7 @@
 # completions. Source it, do not execute it.
 #
 # The "config root" is the directory holding stacks/, global.env and ports.env.
-# It does not have to be this repo: keep the scripts anywhere (e.g. ~/scripts) and
+# It does not have to be this repo: keep the scripts anywhere (e.g. ~/ops) and
 # the compose files elsewhere (e.g. /srv/services). Lookup order, first match wins:
 #
 #   1. $SVC_CONFIG_DIR         per-shell / per-invocation override
