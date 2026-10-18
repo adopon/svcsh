@@ -7,7 +7,20 @@ if [ -n "${ZSH_VERSION:-}" ]; then
 else
     _svc_script="${BASH_SOURCE[0]}"
 fi
-_svc_dir="$(cd "$(dirname "$(readlink -f "$_svc_script")")/.." && pwd)"
+_svc_script_dir="$(cd "$(dirname "$(readlink -f "$_svc_script")")/.." && pwd)"
+
+# Stacks and env files live in the config root, which may be outside this
+# checkout. svc.sh owns the lookup (env > recorded > in-repo), so ask it rather
+# than duplicating the rules here.
+_svc_config_dir() {
+    local dir
+    dir="$("$_svc_script_dir/svc.sh" --config-root 2>/dev/null)"
+    if [ -n "$dir" ]; then
+        printf '%s\n' "$dir"
+    else
+        printf '%s\n' "$_svc_script_dir"
+    fi
+}
 
 _has_compose() {
     [ -f "$1/compose.yml" ] || [ -f "$1/compose.yaml" ] || \
@@ -17,30 +30,35 @@ _has_compose() {
 # List stacks as group/stack (or plain name for flat stacks directly under
 # stacks/ — groups are optional).
 _svc_stacks() {
-    [ -d "$_svc_dir/stacks" ] || return 0
+    local stacks_dir
+    stacks_dir="$(_svc_config_dir)/stacks"
+    [ -d "$stacks_dir" ] || return 0
     local g d name
-    for g in "$_svc_dir/stacks"/*/; do
+    for g in "$stacks_dir"/*/; do
         [ -d "$g" ] || continue
         name="${g%/}"
         if _has_compose "$name"; then
-            echo "${name#"$_svc_dir/stacks/"}"
+            echo "${name#"$stacks_dir/"}"
             continue
         fi
         for d in "$g"*/; do
             _has_compose "$d" || continue
             d="${d%/}"
-            echo "${d#"$_svc_dir/stacks/"}"
+            echo "${d#"$stacks_dir/"}"
         done
     done
 }
 
 _svc_services() {
-    local stack="$1" dir
-    dir="$_svc_dir/stacks/$stack"
+    local stack="$1" root dir
+    root="$(_svc_config_dir)"
+    dir="$root/stacks/$stack"
     if [ -d "$dir" ] && _has_compose "$dir"; then
         (
             cd "$dir" || exit 1
-            flags=(--env-file "$_svc_dir/global.env" --env-file "$_svc_dir/ports.env")
+            flags=()
+            [ -f "$root/global.env" ] && flags+=(--env-file "$root/global.env")
+            [ -f "$root/ports.env" ] && flags+=(--env-file "$root/ports.env")
             [ -f .env ] && flags+=(--env-file .env)
             docker compose "${flags[@]}" config --services 2>/dev/null
         )
@@ -66,17 +84,18 @@ _svcd_completion() {
     esac
 }
 
-# cd to the repo root, a stack's config dir, or a service's primary host data dir:
-#   svcd                  -> <repo>
-#   svcd homelab/media    -> <repo>/stacks/homelab/media
+# cd to the config root, a stack's config dir, or a service's primary host data
+# dir:
+#   svcd                  -> config root (where stacks/ + env files live)
+#   svcd homelab/media    -> <config root>/stacks/homelab/media
 #   svcd homelab/media sonarr -> first bind mount of sonarr
 svcd() {
     if [ "$#" -eq 0 ]; then
-        cd "$_svc_dir" || return 1
+        cd "$(_svc_config_dir)" || return 1
         return 0
     fi
     local target
-    target="$("$_svc_dir/svc.sh" path "$@" | head -n1)" || return 1
+    target="$("$_svc_script_dir/svc.sh" path "$@" | head -n1)" || return 1
     [ -n "$target" ] && cd "$target"
 }
 

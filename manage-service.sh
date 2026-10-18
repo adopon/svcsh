@@ -1,8 +1,21 @@
 #!/bin/bash
 
 # --- CONFIGURATION ---
-# Repo root = directory this script lives in (override with CONFIG_BASE / DATA_BASE)
+# SCRIPT_DIR = this checkout; CONFIG_BASE = the config root (stacks/, *.env),
+# which may live elsewhere. Precedence: $CONFIG_BASE > $SVC_CONFIG_DIR >
+# recorded/first-run root (svc-lib.sh) > SCRIPT_DIR.
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+SVC_SCRIPT_DIR="$SCRIPT_DIR"
+# shellcheck source=svc-lib.sh
+. "$SCRIPT_DIR/svc-lib.sh"
+
+CONFIG_BASE="${CONFIG_BASE:-}"
+if [[ -z "$CONFIG_BASE" ]]; then
+    if ! CONFIG_BASE="$(svc_config_dir)"; then
+        CONFIG_BASE=""
+        svc_prompt_config_dir && CONFIG_BASE="$SVC_PROMPTED_CONFIG_DIR"
+    fi
+fi
 CONFIG_BASE="${CONFIG_BASE:-$SCRIPT_DIR}"
 
 # Shared paths (SSD_PATH, HOMELAB_SERVICE_DATA_PATH, ...)
@@ -87,9 +100,9 @@ remove_service() {
     fi
 
     # Stop the container(s) through svc.sh so global.env/ports.env/.env are loaded
-    if command -v docker &>/dev/null && [[ -x "$CONFIG_BASE/svc.sh" ]]; then
+    if command -v docker &>/dev/null && [[ -x "$SCRIPT_DIR/svc.sh" ]]; then
         echo "Stopping containers for '$STACK_LABEL'..."
-        "$CONFIG_BASE/svc.sh" down "$STACK_LABEL" 2>/dev/null || \
+        "$SCRIPT_DIR/svc.sh" down "$STACK_LABEL" 2>/dev/null || \
             echo "Warning: could not stop containers (running anyway?)."
     fi
 
@@ -277,7 +290,7 @@ EOF
     fi
 
     echo ""
-    if [[ -x "$CONFIG_BASE/svc.sh" ]] && "$CONFIG_BASE/svc.sh" config "$STACK_LABEL" >/dev/null 2>&1; then
+    if [[ -x "$SCRIPT_DIR/svc.sh" ]] && "$SCRIPT_DIR/svc.sh" config "$STACK_LABEL" >/dev/null 2>&1; then
         echo "  Config check: OK — ./svc.sh up $STACK_LABEL"
     else
         echo "  Config check: review $CONFIG_DIR/compose.yml, then ./svc.sh up $STACK_LABEL"
@@ -297,10 +310,10 @@ cat > "$CONFIG_DIR/compose.yml" <<EOF
 #   Config dir: $CONFIG_DIR   (persistent, survives reboots)
 #   Data dir:   $DATA_DIR     (bind-mount target for service data)
 #
-# Shared vars come from the repo's global.env, host ports from ports.env
+# Shared vars come from the config root's global.env, host ports from ports.env
 # (add a \${$PORT_VAR} entry there).
 #
-# Start:   ./svc.sh up $STACK_LABEL   (from the repo root)
+# Start:   ./svc.sh up $STACK_LABEL
 # Logs:    ./svc.sh logs $STACK_LABEL
 # Stop:    ./svc.sh stop $STACK_LABEL
 services:
@@ -324,5 +337,5 @@ echo ""
 echo "Next steps:"
 echo "  1. Edit $CONFIG_DIR/compose.yml (image, ports, volumes)"
 echo "  2. Add a <NAME>_PORT var to $CONFIG_BASE/ports.env if you expose a port"
-echo "  3. ./svc.sh up $STACK_LABEL    (from the repo root)"
+echo "  3. ./svc.sh up $STACK_LABEL"
 echo "-----------------------------------------------"

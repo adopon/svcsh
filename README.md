@@ -22,16 +22,27 @@ values out of git.
 ```
 .
 ├── svc.sh                 # entrypoint: svc.sh <action> <stack> [service]
+├── svc-lib.sh             # config-root resolution (env > recorded > in-repo)
 ├── bin/svc                # `svc` wrapper (added to PATH by install.sh)
 ├── completions/           # bash/zsh/fish completions + svcd helper
 ├── install.sh             # shell integration: PATH + completions + compose env
 ├── manage-service.sh      # scaffold/remove a service directory
-├── global.env.example     # copy to global.env; shared paths + identity
-├── ports.env.example      # copy to ports.env; host ports, grouped by range
-├── examples/              # reference examples (NOT managed by svc.sh)
-│   ├── example-single/    # one-service stack
-│   ├── example-stack/     # multi-service stack (depends_on)
-│   └── example-site/      # reverse-proxied web site (web group)
+├── global.env.example     # copy to <config root>/global.env; shared paths + identity
+├── ports.env.example      # copy to <config root>/ports.env; host ports, grouped by range
+└── examples/              # reference examples (NOT managed by svc.sh)
+    ├── example-single/    # one-service stack
+    ├── example-stack/     # multi-service stack (depends_on)
+    └── example-site/      # reverse-proxied web site (web group)
+```
+
+The **config root** is the directory holding `stacks/`, `global.env` and
+`ports.env`. It defaults to this checkout, so nothing changes if you keep code and
+config together:
+
+```
+<config root>/
+├── global.env             # shared paths + identity
+├── ports.env              # host ports, grouped by range
 └── stacks/                # your stacks — add your own (groups are optional)
     ├── immich/            # flat stack example → svc up immich
     └── web/               # optional group example → svc up web/site-a
@@ -48,7 +59,41 @@ directly under `stacks/` (e.g. `stacks/immich/`) and call
 
 **Examples live in `examples/`, not `stacks/`**, so template examples and your
 real stacks can never collide (and a `git pull` can never touch your stacks).
-They are reference material only; to try one, copy it into `stacks/` first:
+They are reference material only; to try one, copy it into the config root first:
+
+```bash
+cp -r examples/example-single "<config root>/stacks/"   # then: svc up example-single
+```
+
+## Scripts and config in different places
+
+The checkout is just code and holds no per-host values; the config root is just
+data. They can live anywhere, so you can keep one `svcsh` checkout (e.g.
+`~/scripts/svcsh`) and drive compose files elsewhere (e.g. `/srv/services`), or
+work against several config roots from the same checkout.
+
+The config root is resolved in this order, first match wins:
+
+1. `$SVC_CONFIG_DIR` — per-shell or per-invocation override; the way to work on
+   two roots at once.
+2. `~/.config/svcsh/config` (`$XDG_CONFIG_HOME` respected) — recorded once, so it
+   survives re-cloning or updating the scripts.
+3. the checkout itself, when it still has a `stacks/` directory (legacy layout —
+   nothing to configure).
+4. otherwise nothing is found: `svc.sh` asks once on a terminal and records the
+   answer, and errors out when stdin/stdout is not a terminal (CI, cron,
+   completion).
+
+```bash
+./install.sh --config-dir /srv/services    # record it non-interactively
+./svc.sh --config-root                     # print what is resolved
+SVC_CONFIG_DIR=/srv/services ./svc.sh up immich   # one-off override
+```
+
+`svcd` with no argument cd's to the config root, and the optional
+`COMPOSE_ENV_FILES` hook from `install.sh` activates inside the config root
+rather than the checkout — that is where `global.env`, `ports.env` and the stacks
+actually are.
 
 ## Naming: stacks, groups, services
 
@@ -106,7 +151,8 @@ services (space-separated). Groups never nest deeper than one level.
 7. **Use `svc`/`svc.sh` as the entrypoint.** Compose does not search parent
    directories, so plain `docker compose up` only works inside a stack when the
    compose-env hook from `install.sh` is active (answer yes to the prompt or pass
-   `--compose-env`) — it exports `COMPOSE_ENV_FILES` while your shell is in the repo.
+   `--compose-env`) — it exports `COMPOSE_ENV_FILES` while your shell is inside
+   the config root (the directory holding `global.env` and `ports.env`).
 
 ## Env layering
 
@@ -114,7 +160,7 @@ services (space-separated). Groups never nest deeper than one level.
 from any depth; files that don't exist are skipped):
 
 ```
-docker compose --env-file <repo>/global.env --env-file <repo>/ports.env --env-file .env ...
+docker compose --env-file <config root>/global.env --env-file <config root>/ports.env --env-file .env ...
 ```
 
 Later files override earlier ones, so precedence is:
@@ -191,21 +237,23 @@ scaffold.
 
 `install.sh` puts the `svc` command on PATH and wires tab-completion
 (action -> stack -> service) plus the `svcd` helper that cd's straight to a
-config or data directory (needs `jq`). It asks once whether to also export
-`COMPOSE_ENV_FILES` while your shell is inside the repo, so plain
+config or data directory (needs `jq`). It records the config root (asking once on
+a terminal; `--config-dir DIR` to skip the prompt), and it asks whether to also
+export `COMPOSE_ENV_FILES` while your shell is inside the config root, so plain
 `docker compose up` can keep working from any stack directory (that mode adds a
 small shell hook: bash `PROMPT_COMMAND` / zsh `chpwd` / fish PWD event). bash,
 zsh and fish are supported:
 
 ```bash
-./install.sh                    # detect shell, asks about the compose-env hook
+./install.sh                    # detect shell, ask about compose-env + config root
 ./install.sh fish               # or force bash / zsh / fish
 ./install.sh --compose-env      # enable the hook without asking (for scripts)
 ./install.sh --no-compose-env   # ensure it stays off
+./install.sh --config-dir /srv/services   # record where stacks/ + env files live
 ./install.sh --remove
 
 svc up homelab/media  # `svc` works from anywhere after install.sh
-svcd                  # cd to the services repo root
+svcd                  # cd to the config root (where stacks/ + env files live)
 svcd homelab/media    # cd to the stack's config dir
 svcd homelab/media sonarr    # cd to sonarr's primary data dir
 ```
@@ -216,6 +264,8 @@ files live under `completions/fish/`.
 
 ## New server setup
 
+Keep code and config together (the default):
+
 ```bash
 git clone <this repo> ~/services/homelab && cd ~/services/homelab
 cp global.env.example global.env                 # set drive paths, PUID/PGID, TZ
@@ -225,6 +275,19 @@ cp stacks/example-single/.env.example stacks/example-single/.env
 docker network create homelab-network            # external network stacks join
 ./install.sh                                     # optional: `svc` on PATH + completions
 ./svc.sh up example-single
+```
+
+Or keep the scripts in one place and the compose files in another:
+
+```bash
+git clone <this repo> ~/scripts/svcsh
+mkdir -p /srv/services
+cp ~/scripts/svcsh/global.env.example /srv/services/global.env
+cp ~/scripts/svcsh/ports.env.example  /srv/services/ports.env
+mkdir -p /srv/services/stacks
+~/scripts/svcsh/install.sh --config-dir /srv/services   # records the root once
+~/scripts/svcsh/manage-service.sh immich                # scaffolds into /srv/services
+~/scripts/svcsh/svc.sh up immich                        # works from anywhere
 ```
 
 Hardware-specific lines in compose files (`/dev/dri`, `/opt/vc/lib`,
@@ -240,6 +303,6 @@ Template repository) so copies don't share history.
 ## AI assistance
 
 Everything in this repository was created with AI assistance (OpenCode) at the
-direction of a human maintainer: the scripts (`svc.sh`, `manage-service.sh`,
-`install-completion.sh`), the `completions/` files and this README. The compose
+direction of a human maintainer: the scripts (`svc.sh`, `svc-lib.sh`,
+`manage-service.sh`, `install.sh`), the `completions/` files and this README. The compose
 examples and layout are derived from a real homelab. Review before relying on it.

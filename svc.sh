@@ -1,12 +1,14 @@
 #!/bin/bash
-base="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
-stacks_dir="$base/stacks"
+SVC_SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+# shellcheck source=svc-lib.sh
+. "$SVC_SCRIPT_DIR/svc-lib.sh"
 action="$1"
 
 usage() {
   echo "usage: svc.sh <action> <stack> [service]"
   echo "       stack = name, or group/name when using groups (optional)"
   echo "actions: up stop down restart pull logs config ps path edit"
+  echo "options: --config-root   print the resolved config root (stacks/, *.env)"
   echo "examples:"
   echo "  svc.sh up media sonarr              # flat stack, no group"
   echo "  svc.sh up homelab/media sonarr      # grouped stack"
@@ -17,7 +19,26 @@ usage() {
   echo "  svc.sh edit web/site-a            # open compose.yml at the site section"
 }
 
-[ -z "$action" ] && { usage; exit 1; }
+# The stacks and env files live in the config root, which may be outside this
+# repo. SVC_SCRIPT_DIR (this checkout) and the config root are resolved
+# separately, so scripts and compose files can be kept in different places.
+no_config_root() {
+  echo "svc.sh: no config root found." >&2
+  echo "  Set SVC_CONFIG_DIR to the directory holding stacks/, global.env and" >&2
+  echo "  ports.env, or run $SVC_SCRIPT_DIR/install.sh to record it once." >&2
+  exit 1
+}
+
+case "${action:-}" in
+  "")            usage; exit 1 ;;
+  -h|--help|help) usage; exit 0 ;;
+  --config-root)
+    root="$(svc_config_dir)" || root=""
+    [ -n "$root" ] || no_config_root
+    printf '%s\n' "$root"
+    exit 0 ;;
+esac
+
 name="$2"
 [ -z "$name" ] && { usage; exit 1; }
 service="${3:-}"
@@ -32,11 +53,23 @@ if [ "$action" = "down" ] && [ -n "$service" ]; then
   exit 1
 fi
 
+# Resolve once, in the main shell, so the first-run prompt can use the terminal.
+SVC_ROOT=""
+if ! SVC_ROOT="$(svc_config_dir)"; then
+  SVC_ROOT=""
+  if svc_prompt_config_dir; then
+    SVC_ROOT="$SVC_PROMPTED_CONFIG_DIR"
+  fi
+fi
+[ -n "$SVC_ROOT" ] || no_config_root
+
+stacks_dir="$SVC_ROOT/stacks"
+
 cd "$stacks_dir/$name" || { echo "no such stack: $name"; exit 1; }
 
 ENV_FLAGS=()
-[ -f "$base/global.env" ] && ENV_FLAGS+=(--env-file "$base/global.env")
-[ -f "$base/ports.env" ] && ENV_FLAGS+=(--env-file "$base/ports.env")
+[ -f "$SVC_ROOT/global.env" ] && ENV_FLAGS+=(--env-file "$SVC_ROOT/global.env")
+[ -f "$SVC_ROOT/ports.env" ] && ENV_FLAGS+=(--env-file "$SVC_ROOT/ports.env")
 [ -f .env ] && ENV_FLAGS+=(--env-file .env)
 
 run() { docker compose "${ENV_FLAGS[@]}" "$@"; }

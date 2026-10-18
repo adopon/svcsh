@@ -1,10 +1,13 @@
 #!/bin/bash
 # Shell integration for this repo: `svc` on PATH, tab-completion and the `svcd`
-# helper. Optionally also makes plain `docker compose` work while inside the repo.
-# Idempotent; undo with --remove.
+# helper. Optionally also makes plain `docker compose` work inside the config
+# root. Idempotent; undo with --remove.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+SVC_SCRIPT_DIR="$REPO_DIR"
+# shellcheck source=svc-lib.sh
+. "$REPO_DIR/svc-lib.sh"
 MARK_BEGIN="# >>> homelab svc.sh shell integration >>>"
 MARK_END="# <<< homelab svc.sh shell integration <<<"
 FISH_MARKER="# managed by homelab svc.sh shell integration"
@@ -13,26 +16,33 @@ FISH_HOOK_MARKER="__svc_compose_env"
 
 usage() {
     cat <<EOF
-usage: install.sh [shell] [--compose-env|--no-compose-env] [--remove]
+usage: install.sh [shell] [--compose-env|--no-compose-env] [--config-dir DIR] [--remove]
 
 Adds (or removes) a managed block that:
   - puts \`svc\` on PATH
   - loads completions for svc/svcd + the svcd helper
 
+The config root (the directory holding stacks/, global.env and ports.env) does
+not have to be this checkout. Record it once with --config-dir, or accept the
+interactive prompt; it is stored in $(svc_config_file)
+and picked up by svc.sh, manage-service.sh and the completions. \$SVC_CONFIG_DIR
+always overrides it.
+
 The optional compose-env hook exports COMPOSE_ENV_FILES while your shell is
-inside the repo, so plain \`docker compose up\` works from any stack directory.
-It installs a shell hook (bash PROMPT_COMMAND / zsh chpwd / fish PWD event).
-When run interactively you are asked once; on re-runs your current choice is
-kept. Use the flags to decide non-interactively.
+inside the config root, so plain \`docker compose up\` works from any stack
+directory. It installs a shell hook (bash PROMPT_COMMAND / zsh chpwd / fish PWD
+event). When run interactively you are asked once; on re-runs your current
+choice is kept. Use the flags to decide non-interactively.
 
 Supported shells: bash, zsh, fish (default: detect from \$SHELL).
 
-  ./install.sh                    # detect shell, ask about the hook
+  ./install.sh                    # detect shell, ask about hook + config root
   ./install.sh bash               # block in ~/.bashrc
   ./install.sh zsh                # block in ~/.zshrc (or \$ZDOTDIR/.zshrc)
   ./install.sh fish               # files in ~/.config/fish/{completions,functions}
   ./install.sh --compose-env      # also enable plain-compose fallback
   ./install.sh --no-compose-env   # ensure it stays disabled
+  ./install.sh --config-dir /srv/services
   ./install.sh --remove           # remove for the selected/detected shell
 EOF
 }
@@ -40,16 +50,45 @@ EOF
 shell=""
 remove=0
 compose_env=""   # "" = ask (interactive) / keep current; 1 = yes; 0 = no
-for arg in "$@"; do
+config_dir_arg=""
+while [ $# -gt 0 ]; do
+    arg="$1"; shift
     case "$arg" in
         --remove|-r)       remove=1 ;;
         --compose-env)     compose_env=1 ;;
         --no-compose-env)  compose_env=0 ;;
+        --config-dir)
+            [ $# -gt 0 ] || { echo "--config-dir needs a directory" >&2; exit 1; }
+            config_dir_arg="$1"; shift ;;
+        --config-dir=*)    config_dir_arg="${arg#--config-dir=}" ;;
         bash|zsh|fish)     shell="$arg" ;;
         -h|--help)         usage; exit 0 ;;
         *) echo "unknown argument: $arg" >&2; usage; exit 1 ;;
     esac
 done
+
+# Where stacks/ + env files live. Explicit flag > already resolved (env var,
+# recorded file, or legacy in-repo layout) > prompt > this checkout.
+if [ -n "$config_dir_arg" ]; then
+    if ! svc_write_config_dir "$config_dir_arg"; then
+        echo "cannot write $(svc_config_file)" >&2; exit 1
+    fi
+    config_dir="$config_dir_arg"
+    echo "Recorded config root in $(svc_config_file)"
+elif config_dir="$(svc_config_dir)"; then
+    :
+else
+    config_dir="$REPO_DIR"
+    if [ "$remove" -eq 0 ] && [ -t 0 ]; then
+        read -r -p "Config root — dir holding stacks/, global.env, ports.env [$REPO_DIR]: " answer || answer=""
+        config_dir="${answer:-$REPO_DIR}"
+    fi
+    if [ "$remove" -eq 0 ]; then
+        if svc_write_config_dir "$config_dir"; then
+            echo "Recorded config root in $(svc_config_file)"
+        fi
+    fi
+fi
 
 if [ -z "$shell" ]; then
     shell="$(basename "${SHELL:-bash}")"
@@ -87,10 +126,10 @@ emit_bash_hook() {
 _svc_compose_env() {
     local _svc_env
     case "$PWD" in
-        "@REPO_DIR@"|"@REPO_DIR@"/*)
+        "@CONFIG_DIR@"|"@CONFIG_DIR@"/*)
             _svc_env=""
-            [ -f "@REPO_DIR@/global.env" ] && _svc_env="@REPO_DIR@/global.env"
-            [ -f "@REPO_DIR@/ports.env" ] && _svc_env="${_svc_env:+$_svc_env,}@REPO_DIR@/ports.env"
+            [ -f "@CONFIG_DIR@/global.env" ] && _svc_env="@CONFIG_DIR@/global.env"
+            [ -f "@CONFIG_DIR@/ports.env" ] && _svc_env="${_svc_env:+$_svc_env,}@CONFIG_DIR@/ports.env"
             [ -f "$PWD/.env" ] && _svc_env="${_svc_env:+$_svc_env,}$PWD/.env"
             if [ -n "$_svc_env" ]; then
                 export COMPOSE_ENV_FILES="$_svc_env" _SVC_COMPOSE_ENV=1
@@ -110,11 +149,11 @@ EOF
 emit_fish_hook() {
     cat <<'EOF'
 
-function __svc_compose_env --on-variable PWD --description 'homelab: COMPOSE_ENV_FILES inside the services repo'
-    if test "$PWD" = "@REPO_DIR@"; or string match -q "@REPO_DIR@/*" "$PWD"
+function __svc_compose_env --on-variable PWD --description 'homelab: COMPOSE_ENV_FILES inside the config root'
+    if test "$PWD" = "@CONFIG_DIR@"; or string match -q "@CONFIG_DIR@/*" "$PWD"
         set -l files
-        test -f "@REPO_DIR@/global.env"; and set files $files "@REPO_DIR@/global.env"
-        test -f "@REPO_DIR@/ports.env"; and set files $files "@REPO_DIR@/ports.env"
+        test -f "@CONFIG_DIR@/global.env"; and set files $files "@CONFIG_DIR@/global.env"
+        test -f "@CONFIG_DIR@/ports.env"; and set files $files "@CONFIG_DIR@/ports.env"
         test -f "$PWD/.env"; and set files $files "$PWD/.env"
         if test (count $files) -gt 0
             set -gx COMPOSE_ENV_FILES (string join , $files)
@@ -175,7 +214,7 @@ install_fish() {
         echo "    set -gx PATH \"$REPO_DIR/bin\" \$PATH"
         echo "end"
         if [ "$compose_env" -eq 1 ]; then
-            emit_fish_hook | sed "s|@REPO_DIR@|$REPO_DIR|g"
+            emit_fish_hook | sed "s|@REPO_DIR@|$REPO_DIR|g; s|@CONFIG_DIR@|$config_dir|g"
         fi
         echo "source \"$fish_config/completions/svc.sh.fish\""
         echo "$MARK_END"
@@ -187,6 +226,7 @@ install_fish() {
         echo "Installed fish integration in $fish_config (PATH + completions)"
     fi
     command -v fish >/dev/null || echo "note: fish is not in PATH; files were installed anyway"
+    echo "Config root: $config_dir"
     echo "Open a new fish session to pick it up."
 }
 
@@ -216,6 +256,9 @@ if [ "$remove" -eq 1 ]; then
     else
         echo "No managed integration block found in $rc"
     fi
+    if [ -f "$(svc_config_file)" ]; then
+        echo "Kept the recorded config root, $(svc_config_file); remove that file to be asked again."
+    fi
     exit 0
 fi
 
@@ -237,7 +280,7 @@ fi
     echo "$MARK_BEGIN"
     echo "$path_line"
     if [ "$compose_env" -eq 1 ]; then
-        emit_bash_hook | sed "s|@REPO_DIR@|$REPO_DIR|g"
+        emit_bash_hook | sed "s|@REPO_DIR@|$REPO_DIR|g; s|@CONFIG_DIR@|$config_dir|g"
         echo "$hook_activation"
     fi
     echo "source \"$source_file\""
@@ -249,4 +292,5 @@ if [ "$compose_env" -eq 1 ]; then
 else
     echo "Installed shell integration for '$shell' in $rc (PATH + completions)"
 fi
+echo "Config root: $config_dir"
 echo "Reload with: source \"$rc\"  (or open a new shell)"

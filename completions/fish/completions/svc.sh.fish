@@ -2,9 +2,20 @@
 # Fish completions for svc.sh and svcd.
 # Install: copy to ~/.config/fish/completions/svc.sh.fish (install.sh does this
 # and substitutes @REPO_DIR@).
-set -g __svc_dir '@REPO_DIR@'
-if not test -d $__svc_dir; and set -q svc_repo
-    set -g __svc_dir $svc_repo
+set -g __svc_script_dir '@REPO_DIR@'
+if not test -d $__svc_script_dir; and set -q svc_repo
+    set -g __svc_script_dir $svc_repo
+end
+
+# Stacks and env files live in the config root, which may be outside this
+# checkout. svc.sh owns the lookup, so ask it instead of duplicating the rules.
+function __svc_config_dir
+    set -l dir (command $__svc_script_dir/svc.sh --config-root 2>/dev/null)
+    if test -n "$dir"
+        echo $dir
+    else
+        echo $__svc_script_dir
+    end
 end
 
 function __svc_has_compose --argument-names dir
@@ -12,7 +23,7 @@ function __svc_has_compose --argument-names dir
 end
 
 function __svc_stacks
-    set -l stacks_dir $__svc_dir/stacks
+    set -l stacks_dir (__svc_config_dir)/stacks
     test -d $stacks_dir; or return
     for g in $stacks_dir/*/
         if __svc_has_compose $g
@@ -29,10 +40,13 @@ function __svc_stacks
 end
 
 function __svc_services --argument-names stack
-    set -l dir $__svc_dir/stacks/$stack
+    set -l root (__svc_config_dir)
+    set -l dir $root/stacks/$stack
     __svc_has_compose $dir; or return
     pushd $dir; or return
-    set -l flags --env-file $__svc_dir/global.env --env-file $__svc_dir/ports.env
+    set -l flags
+    test -f $root/global.env; and set flags $flags --env-file $root/global.env
+    test -f $root/ports.env; and set flags $flags --env-file $root/ports.env
     test -f .env; and set flags $flags --env-file .env
     docker compose $flags config --services 2>/dev/null
     popd
