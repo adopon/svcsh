@@ -44,7 +44,10 @@ svc_config_dir() {
             return 0
         fi
     fi
-    if [ -n "${SVC_SCRIPT_DIR:-}" ] && [ -d "$SVC_SCRIPT_DIR/stacks" ]; then
+    # Legacy in-repo layout: both stacks/ and global.env must exist. The
+    # checkout only has an empty stacks/ placeholder, so it is not a config root.
+    if [ -n "${SVC_SCRIPT_DIR:-}" ] && [ -d "$SVC_SCRIPT_DIR/stacks" ] \
+            && [ -f "$SVC_SCRIPT_DIR/global.env" ]; then
         printf '%s\n' "$SVC_SCRIPT_DIR"
         return 0
     fi
@@ -69,7 +72,10 @@ svc_write_config_dir() {
 # both stdin and stdout must be TTYs, so a piped invocation or a completion
 # subshell gets the "no config root" error instead of a hanging prompt.
 svc_prompt_config_dir() {
-    local dir default="${SVC_SCRIPT_DIR:-$PWD}"
+    local dir default="${XDG_CONFIG_HOME:-$HOME/.config}/svcsh"
+    if [ -n "${SVC_SCRIPT_DIR:-}" ] && [ -f "$SVC_SCRIPT_DIR/global.env" ]; then
+        default="$SVC_SCRIPT_DIR"
+    fi
     [ -t 0 ] && [ -t 1 ] || return 1
     printf 'Where do your compose files live? (the directory holding stacks/, global.env and ports.env)\n' >&2
     read -r -p "  config root [$default]: " dir || return 1

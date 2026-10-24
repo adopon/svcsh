@@ -25,8 +25,9 @@ Adds (or removes) a managed block that:
 The config root (the directory holding stacks/, global.env and ports.env) does
 not have to be this checkout. Record it once with --config-dir, or accept the
 interactive prompt; it is stored in $(svc_config_file)
-and picked up by svc.sh, manage-service.sh and the completions. \$SVC_CONFIG_DIR
-always overrides it.
+and picked up by svc.sh, manage-service.sh and the completions. If nothing is
+recorded, the default is ${XDG_CONFIG_HOME:-$HOME/.config}/svcsh.
+\$SVC_CONFIG_DIR always overrides it.
 
 The optional compose-env hook exports COMPOSE_ENV_FILES while your shell is
 inside the config root, so plain \`docker compose up\` works from any stack
@@ -68,7 +69,8 @@ while [ $# -gt 0 ]; do
 done
 
 # Where stacks/ + env files live. Explicit flag > already resolved (env var,
-# recorded file, or legacy in-repo layout) > prompt > this checkout.
+# recorded file, or legacy in-repo layout) > prompt > ~/.config/svcsh.
+default_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/svcsh"
 if [ -n "$config_dir_arg" ]; then
     if ! svc_write_config_dir "$config_dir_arg"; then
         echo "cannot write $(svc_config_file)" >&2; exit 1
@@ -78,10 +80,10 @@ if [ -n "$config_dir_arg" ]; then
 elif config_dir="$(svc_config_dir)"; then
     :
 else
-    config_dir="$REPO_DIR"
+    config_dir="$default_config_dir"
     if [ "$remove" -eq 0 ] && [ -t 0 ]; then
-        read -r -p "Config root — dir holding stacks/, global.env, ports.env [$REPO_DIR]: " answer || answer=""
-        config_dir="${answer:-$REPO_DIR}"
+        read -r -p "Config root — dir holding stacks/, global.env, ports.env [$default_config_dir]: " answer || answer=""
+        config_dir="${answer:-$default_config_dir}"
     fi
     if [ "$remove" -eq 0 ]; then
         if svc_write_config_dir "$config_dir"; then

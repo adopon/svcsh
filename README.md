@@ -78,11 +78,11 @@ The config root is resolved in this order, first match wins:
    two roots at once.
 2. `~/.config/svcsh/config` (`$XDG_CONFIG_HOME` respected) — recorded once, so it
    survives re-cloning or updating the scripts.
-3. the checkout itself, when it still has a `stacks/` directory (legacy layout —
-   nothing to configure).
-4. otherwise nothing is found: `svc.sh` asks once on a terminal and records the
-   answer, and errors out when stdin/stdout is not a terminal (CI, cron,
-   completion).
+3. the checkout itself, when it still has both `global.env` and `stacks/`
+   (legacy layout — nothing to configure).
+4. otherwise nothing is found: `svc.sh` asks once on a terminal, defaulting to
+   `~/.config/svcsh` (`$XDG_CONFIG_HOME` respected), and records the answer.
+   It errors out when stdin/stdout is not a terminal (CI, cron, completion).
 
 ```bash
 ./install.sh --config-dir /srv/services    # record it non-interactively
@@ -237,8 +237,9 @@ scaffold.
 
 `install.sh` puts the `svc` command on PATH and wires tab-completion
 (action -> stack -> service) plus the `svcd` helper that cd's straight to a
-config or data directory (needs `jq`). It records the config root (asking once on
-a terminal; `--config-dir DIR` to skip the prompt), and it asks whether to also
+config or data directory (needs `jq`). It records the config root (default
+`~/.config/svcsh`; asks once on a terminal, `--config-dir DIR` to skip the
+prompt), and it asks whether to also
 export `COMPOSE_ENV_FILES` while your shell is inside the config root, so plain
 `docker compose up` can keep working from any stack directory (that mode adds a
 small shell hook: bash `PROMPT_COMMAND` / zsh `chpwd` / fish PWD event). bash,
